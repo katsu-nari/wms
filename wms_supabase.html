@@ -361,32 +361,72 @@ tr:hover td{background:var(--surface2);}
 
     <!-- SCAN -->
     <div class="page" id="page-scan">
+      <!-- カメラスキャナーオーバーレイ -->
+      <div id="cameraOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:500;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:rgba(0,0,0,.6);">
+          <span style="font-family:var(--disp);font-size:16px;font-weight:700;color:#fff;">📷 カメラスキャン</span>
+          <button onclick="stopCamera()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;cursor:pointer;">✕ 閉じる</button>
+        </div>
+        <div style="flex:1;position:relative;overflow:hidden;">
+          <video id="cameraVideo" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <!-- スキャン枠 -->
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+            <div style="width:260px;height:160px;position:relative;">
+              <div style="position:absolute;top:0;left:0;width:40px;height:40px;border-top:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:4px 0 0 0;"></div>
+              <div style="position:absolute;top:0;right:0;width:40px;height:40px;border-top:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 4px 0 0;"></div>
+              <div style="position:absolute;bottom:0;left:0;width:40px;height:40px;border-bottom:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:0 0 0 4px;"></div>
+              <div style="position:absolute;bottom:0;right:0;width:40px;height:40px;border-bottom:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 0 4px 0;"></div>
+              <div id="scanLine" style="position:absolute;top:0;left:4px;right:4px;height:2px;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:scanAnim 2s linear infinite;"></div>
+            </div>
+          </div>
+          <div id="cameraStatus" style="position:absolute;bottom:20px;left:0;right:0;text-align:center;color:#fff;font-size:13px;background:rgba(0,0,0,.5);padding:8px;">バーコードを枠内に合わせてください</div>
+        </div>
+      </div>
+      <style>@keyframes scanAnim{0%{top:0}50%{top:calc(100% - 2px)}100%{top:0}}</style>
+
       <div class="grid-2">
         <div>
           <div class="card mb-12">
-            <div class="card-header"><div class="card-title">バーコード/QRスキャン</div></div>
+            <div class="card-header"><div class="card-title">バーコード / QRスキャン</div></div>
             <div class="card-body">
-              <div class="scan-box" id="scanBox" onclick="simulateScan()">
-                <div class="scan-icon">📷</div>
-                <div style="font-size:14px;font-weight:600;margin-bottom:3px;">タップしてスキャン</div>
-                <div class="text-sm">またはバーコードリーダーで読み取り</div>
-              </div>
+              <!-- カメラ起動ボタン -->
+              <button onclick="startCamera()" style="width:100%;padding:20px;background:rgba(0,229,160,.08);border:2px dashed var(--accent);border-radius:10px;color:var(--accent);font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px;">
+                <span style="font-size:28px;">📷</span>カメラでスキャン
+              </button>
               <div class="form-group" style="margin-bottom:10px;">
                 <div class="form-label">手動入力</div>
-                <div style="display:flex;gap:8px;"><input class="form-input" id="manualBC" placeholder="バーコード番号..." oninput="lookupBC(this.value)"><button class="btn btn-primary btn-sm" onclick="lookupBC(document.getElementById('manualBC').value)">検索</button></div>
+                <div style="display:flex;gap:8px;">
+                  <input class="form-input" id="manualBC" placeholder="JANコード・QRコードを入力..." oninput="lookupBC(this.value)">
+                  <button class="btn btn-primary btn-sm" onclick="lookupBC(document.getElementById('manualBC').value)">検索</button>
+                </div>
               </div>
-              <div class="scan-code" id="scanResult">—</div>
+              <!-- スキャン結果表示 -->
+              <div id="scanResultCard" style="display:none;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:12px;">
+                <div style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:4px;">スキャン結果</div>
+                <div id="scanResultName" style="font-size:14px;font-weight:600;margin-bottom:2px;">—</div>
+                <div id="scanResultSku" style="font-family:var(--mono);font-size:11px;color:var(--text2);">—</div>
+                <div id="scanResultQty" style="font-family:var(--mono);font-size:12px;color:var(--green);margin-top:4px;">—</div>
+              </div>
+              <div class="scan-code" id="scanResult" style="display:none;">—</div>
             </div>
           </div>
           <div class="card">
             <div class="card-header"><div class="card-title">スキャン操作</div></div>
             <div class="card-body">
-              <div class="tabs"><div class="tab active" onclick="switchTab(this)">入庫</div><div class="tab" onclick="switchTab(this)">出庫</div><div class="tab" onclick="switchTab(this)">移動</div></div>
+              <div class="tabs">
+                <div class="tab active" id="scanTabIn" onclick="setScanMode('入庫',this)">入庫</div>
+                <div class="tab" id="scanTabOut" onclick="setScanMode('出庫',this)">出庫</div>
+                <div class="tab" id="scanTabMove" onclick="setScanMode('移動',this)">移動</div>
+              </div>
               <div class="form-grid">
-                <div class="form-group"><div class="form-label">クライアント</div><select class="form-select" id="scanClient"><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select></div>
+                <div class="form-group">
+                  <div class="form-label">クライアント</div>
+                  <select class="form-select" id="scanClient"></select>
+                </div>
                 <div class="form-row">
                   <div class="form-group"><div class="form-label">ロケーション</div><input class="form-input" placeholder="A-01-01" id="scanLoc"></div>
-                  <div class="form-group"><div class="form-label">数量</div><input class="form-input" type="number" value="1" id="scanQty"></div>
+                  <div class="form-group"><div class="form-label">数量</div><input class="form-input" type="number" value="1" id="scanQty" min="1"></div>
                 </div>
                 <button class="btn btn-primary" style="width:100%;" onclick="processScan()">処理実行</button>
               </div>
@@ -395,7 +435,7 @@ tr:hover td{background:var(--surface2);}
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title">スキャン履歴</div><span class="text-sm" id="scanCount">本日: 0件</span></div>
-          <div class="table-wrap"><table><thead><tr><th>時刻</th><th class="hm">バーコード</th><th>商品</th><th>数量</th></tr></thead><tbody id="scanTbody"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>時刻</th><th>種別</th><th>商品</th><th>数量</th></tr></thead><tbody id="scanTbody"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -404,7 +444,7 @@ tr:hover td{background:var(--surface2);}
     <div class="page" id="page-inventory">
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
         <div class="search-bar" style="max-width:none;flex:1;min-width:160px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="商品名・SKU・バーコード..." id="invSearch" oninput="filterInv(this.value)"></div>
-        <select class="form-select" style="width:150px;flex-shrink:0;" id="clientFilt" onchange="filterInv()"><option value="">全クライアント</option><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select>
+        <select class="form-select" style="width:150px;flex-shrink:0;" id="clientFilt" onchange="filterInv()"><option value="">全クライアント</option></select>
         <button class="btn btn-primary" onclick="openModal('addItemModal')">商品追加</button>
       </div>
       <div class="card"><div class="table-wrap"><table><thead><tr><th>SKU</th><th class="hm">バーコード</th><th>商品名</th><th class="hm">クライアント</th><th>在庫数</th><th class="hm">ロケーション</th><th class="hm">期限</th><th>状態</th><th>操作</th></tr></thead><tbody id="invTbody"></tbody></table></div></div>
@@ -412,6 +452,12 @@ tr:hover td{background:var(--surface2);}
 
     <!-- LOCATION -->
     <div class="page" id="page-location">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text2);">ロケーションをタップして商品を確認 / 登録</div>
+        <button class="btn btn-primary" onclick="openModal('addLocModal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>ロケーション登録
+        </button>
+      </div>
       <div class="grid-2">
         <div class="card">
           <div class="card-header"><div class="card-title">倉庫ロケーションマップ</div></div>
@@ -426,15 +472,17 @@ tr:hover td{background:var(--surface2);}
           </div>
         </div>
         <div>
-          <div class="card mb-12"><div class="card-header"><div class="card-title">ロケーション詳細</div></div><div class="card-body" id="locDetail"><div style="text-align:center;padding:20px;color:var(--text3);"><div style="font-size:28px;margin-bottom:6px;">📦</div><div>ロケーションを選択</div></div></div></div>
+          <div class="card mb-12">
+            <div class="card-header"><div class="card-title">ロケーション詳細</div></div>
+            <div class="card-body" id="locDetail">
+              <div style="text-align:center;padding:20px;color:var(--text3);"><div style="font-size:28px;margin-bottom:6px;">📦</div><div>マップのセルをタップ</div></div>
+            </div>
+          </div>
           <div class="card">
-            <div class="card-header"><div class="card-title">エリア別使用率</div></div>
-            <div class="card-body">
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアA (冷蔵)</span><span style="font-family:var(--mono);font-size:11px;">68%</span></div><div class="progress-bar"><div class="progress-fill" style="width:68%;background:var(--yellow);"></div></div></div>
-                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアB (常温)</span><span style="font-family:var(--mono);font-size:11px;">82%</span></div><div class="progress-bar"><div class="progress-fill" style="width:82%;background:var(--red);"></div></div></div>
-                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアC (危険物)</span><span style="font-family:var(--mono);font-size:11px;">34%</span></div><div class="progress-bar"><div class="progress-fill" style="width:34%;background:var(--green);"></div></div></div>
-              </div>
+            <div class="card-header"><div class="card-title">登録済みロケーション</div><span class="text-sm" id="locTotalCount">—</span></div>
+            <div style="max-height:220px;overflow-y:auto;">
+              <table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:6px 10px;font-family:var(--mono);font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--surface2);">コード</th><th style="text-align:left;padding:6px 10px;font-family:var(--mono);font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--surface2);">エリア</th><th style="text-align:left;padding:6px 10px;font-family:var(--mono);font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--surface2);">最大数</th><th style="text-align:left;padding:6px 10px;font-family:var(--mono);font-size:9px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--surface2);">操作</th></tr></thead>
+              <tbody id="locListTbody"></tbody></table>
             </div>
           </div>
         </div>
@@ -540,6 +588,31 @@ tr:hover td{background:var(--surface2);}
 </div>
 
 <div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ロケーション登録モーダル -->
+<div class="modal-overlay" id="addLocModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">ロケーション登録</div><button class="modal-close" onclick="closeModal('addLocModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-row">
+          <div class="form-group"><div class="form-label">エリア *</div><select class="form-select" id="loc_area" onchange="updateLocPreview()"><option value="A">A（冷蔵）</option><option value="B">B（常温）</option><option value="C">C（危険物）</option><option value="D">D</option><option value="E">E</option></select></div>
+          <div class="form-group"><div class="form-label">列番号 *</div><input class="form-input" id="loc_row" placeholder="01" maxlength="2" oninput="updateLocPreview()"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><div class="form-label">段番号 *</div><input class="form-input" id="loc_col" placeholder="01" maxlength="2" oninput="updateLocPreview()"></div>
+          <div class="form-group"><div class="form-label">最大収容数</div><input class="form-input" type="number" id="loc_max" value="100"></div>
+        </div>
+        <div class="form-group"><div class="form-label">備考</div><input class="form-input" id="loc_note" placeholder="温度管理、重量制限など"></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:12px;">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text2);margin-bottom:6px;">ロケーションコード（自動生成）</div>
+          <div id="locCodePreview" style="font-family:var(--mono);font-size:20px;color:var(--accent);font-weight:700;">A-01-01</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('addLocModal')">キャンセル</button><button class="btn btn-primary" onclick="submitAddLoc()">登録</button></div>
+  </div>
+</div>
 
 
 <script>
@@ -834,38 +907,228 @@ async function submitAddClient() {
   else { toast('登録に失敗しました','error'); }
 }
 
-// ── SCAN ──
+// ── CAMERA SCAN ──
 let curScan = null;
-function simulateScan(){
-  const codes=['4901234500001','4901234500002','4901234500003'];
-  const bc=codes[Math.floor(Math.random()*codes.length)];
-  document.getElementById('manualBC').value=bc; lookupBC(bc);
-  const b=document.getElementById('scanBox'); b.classList.add('active'); setTimeout(()=>b.classList.remove('active'),500);
+let scanMode = '入庫';
+let cameraStream = null;
+let scanInterval = null;
+
+function setScanMode(mode, el) {
+  scanMode = mode;
+  el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
 }
-async function lookupBC(code) {
-  if(!code||code.length<5) return;
-  const d = document.getElementById('scanResult');
-  // DBから検索
-  const items = await sb.get('inventory', `&barcode=eq.${code}&limit=1`);
-  if(items&&items.length) {
-    curScan={bc:code, name:items[0].name, sku:items[0].sku, id:items[0].id, qty:items[0].qty};
-    d.textContent=code; d.style.color='var(--accent)'; toast(items[0].name+' を検出');
-  } else {
-    curScan={bc:code,name:'未登録',sku:'—'};
-    d.textContent=code+' (未登録)'; d.style.color='var(--yellow)';
+
+async function startCamera() {
+  const overlay = document.getElementById('cameraOverlay');
+  overlay.style.display = 'flex';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
+    });
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    await video.play();
+    // ZXing ライブラリでデコード
+    startZxingDecode(video);
+  } catch(e) {
+    document.getElementById('cameraStatus').textContent = 'カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。';
+    console.error(e);
   }
 }
+
+function startZxingDecode(video) {
+  // ZXingライブラリを動的ロード
+  if(window.ZXing) { doZxingDecode(video); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
+  s.onload = () => doZxingDecode(video);
+  s.onerror = () => { document.getElementById('cameraStatus').textContent = 'スキャナー読み込みエラー。手動入力を使用してください。'; };
+  document.head.appendChild(s);
+}
+
+function doZxingDecode(video) {
+  try {
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.DATA_MATRIX
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    const reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
+
+    const canvas = document.getElementById('cameraCanvas');
+    const ctx = canvas.getContext('2d');
+    let lastCode = '';
+
+    scanInterval = setInterval(() => {
+      if(video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      try {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const luminance = new ZXing.RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+        const binary = new ZXing.HybridBinarizer(luminance);
+        const result = reader.decode(new ZXing.BinaryBitmap(binary));
+        if(result && result.text !== lastCode) {
+          lastCode = result.text;
+          stopCamera();
+          document.getElementById('manualBC').value = result.text;
+          lookupBC(result.text);
+          // バイブレーション
+          if(navigator.vibrate) navigator.vibrate(100);
+        }
+      } catch(e) {
+        // スキャン中は継続（エラー無視）
+      }
+    }, 200);
+  } catch(e) {
+    document.getElementById('cameraStatus').textContent = 'スキャナー初期化エラー';
+  }
+}
+
+function stopCamera() {
+  if(scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+  if(cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+  document.getElementById('cameraOverlay').style.display = 'none';
+}
+
+async function lookupBC(code) {
+  if(!code || code.length < 3) return;
+  const items = await sb.get('inventory', `&barcode=eq.${encodeURIComponent(code)}&limit=1`);
+  const card = document.getElementById('scanResultCard');
+  card.style.display = 'block';
+  if(items && items.length) {
+    curScan = {bc:code, name:items[0].name, sku:items[0].sku, id:items[0].id, qty:items[0].qty};
+    document.getElementById('scanResultName').textContent = items[0].name;
+    document.getElementById('scanResultSku').textContent = items[0].sku + ' | BC: ' + code;
+    document.getElementById('scanResultQty').textContent = '現在庫: ' + items[0].qty + '個';
+    card.style.borderColor = 'var(--accent)';
+    toast('✓ ' + items[0].name + ' を検出');
+  } else {
+    curScan = {bc:code, name:'未登録商品', sku:'—'};
+    document.getElementById('scanResultName').textContent = '未登録: ' + code;
+    document.getElementById('scanResultSku').textContent = 'DBに商品が登録されていません';
+    document.getElementById('scanResultQty').textContent = '在庫なし';
+    card.style.borderColor = 'var(--yellow)';
+    toast('未登録バーコード: ' + code, 'error');
+  }
+}
+
 async function processScan(){
   if(!curScan){ toast('バーコードをスキャンしてください','error'); return; }
-  const qty=+document.getElementById('scanQty').value||1;
-  const now=new Date(), t=[now.getHours(),now.getMinutes(),now.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  const qty = +document.getElementById('scanQty').value || 1;
+  const loc = document.getElementById('scanLoc').value;
+  const client = document.getElementById('scanClient').value;
+  const now = new Date();
+  const t = [now.getHours(),now.getMinutes(),now.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
   D.scanN++;
-  const tb=document.getElementById('scanTbody'), row=document.createElement('tr');
-  row.innerHTML=`<td style="font-family:var(--mono);color:var(--text2)">${t}</td><td class="hm" style="font-family:var(--mono);font-size:10px">${curScan.bc}</td><td>${curScan.name}</td><td style="font-family:var(--mono)">${qty}</td>`;
-  row.style.animation='slideUp .2s ease'; tb.prepend(row);
-  document.getElementById('scanCount').textContent='本日: '+D.scanN+'件';
-  document.getElementById('scanQty').value=1;
-  toast('スキャン完了: '+curScan.name+' × '+qty);
+
+  // 在庫更新
+  if(curScan.id) {
+    const newQty = scanMode === '入庫' ? (curScan.qty||0) + qty : Math.max(0, (curScan.qty||0) - qty);
+    await sb.update('inventory', curScan.id, {qty: newQty, location: loc||undefined});
+    curScan.qty = newQty;
+    document.getElementById('scanResultQty').textContent = '現在庫: ' + newQty + '個';
+  }
+
+  const tb = document.getElementById('scanTbody');
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td style="font-family:var(--mono);color:var(--text2);font-size:11px">${t}</td>
+    <td><span class="badge ${scanMode==='入庫'?'badge-green':scanMode==='出庫'?'badge-blue':'badge-gray'}">${scanMode}</span></td>
+    <td>${curScan.name}</td>
+    <td style="font-family:var(--mono)">${qty}</td>`;
+  row.style.animation = 'slideUp .2s ease';
+  tb.prepend(row);
+  document.getElementById('scanCount').textContent = '本日: ' + D.scanN + '件';
+  document.getElementById('scanQty').value = 1;
+  if(navigator.vibrate) navigator.vibrate(50);
+  toast(`${scanMode}完了: ${curScan.name} × ${qty}`);
+}
+
+// ── LOCATION DB ──
+async function renderLoc() {
+  // ロケーション一覧をDBから取得（テーブルがなければローカル表示）
+  const rows=['A','B','C','D','E','F','G','H'], cols=Array.from({length:10},(_,i)=>String(i+1).padStart(2,'0'));
+  const sts=['empty','empty','low','low','mid','mid','full','low','empty','mid'];
+  const map = document.getElementById('locMap');
+  if(!map) return;
+  map.innerHTML = '<div class="loc-row"><div class="loc-label"></div>'+cols.map(c=>`<div class="loc-label" style="text-align:center;font-size:8px">${c}</div>`).join('')+'</div>' +
+    rows.map(r=>'<div class="loc-row"><div class="loc-label">'+r+'</div>'+cols.map((c,i)=>{
+      const st=sts[(i+r.charCodeAt(0))%sts.length];
+      return `<div class="loc-cell ${st}" onclick="showLocDet('${r}-${c}')" title="${r}-${c}">${st!=='empty'?'●':''}</div>`;
+    }).join('')+'</div>').join('');
+
+  // 登録済みロケーション一覧
+  try {
+    const locs = await sb.get('locations');
+    const tbody = document.getElementById('locListTbody');
+    if(tbody) {
+      document.getElementById('locTotalCount').textContent = locs.length + '件';
+      if(!locs.length) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text3);font-size:12px">まだ登録がありません</td></tr>`;
+      } else {
+        tbody.innerHTML = locs.map(l=>`
+          <tr>
+            <td style="font-family:var(--mono);font-size:12px;padding:8px 10px">${l.code}</td>
+            <td style="font-size:11px;padding:8px 10px;color:var(--text2)">${l.area||'—'}</td>
+            <td style="font-family:var(--mono);font-size:11px;padding:8px 10px">${l.max_capacity||'—'}</td>
+            <td style="padding:8px 10px"><button class="btn btn-ghost btn-sm" onclick="deleteLoc('${l.id}','${l.code}')">削除</button></td>
+          </tr>`).join('');
+      }
+    }
+  } catch(e) {}
+}
+
+async function showLocDet(loc) {
+  const d = document.getElementById('locDetail');
+  d.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text2);font-size:12px">読み込み中...</div>`;
+  const items = await sb.get('inventory', `&location=like.${loc[0]}*`);
+  if(!items.length){
+    d.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)"><div style="font-size:22px;margin-bottom:6px">📭</div><div style="font-family:var(--mono);color:var(--accent);font-size:14px">${loc}</div><div style="margin-top:4px;font-size:12px">空きロケーション</div></div>`;
+    return;
+  }
+  d.innerHTML = `<div style="font-family:var(--mono);color:var(--accent);margin-bottom:10px;font-size:13px;">📦 ${loc}</div>` +
+    items.slice(0,4).map(i=>`
+      <div style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:6px;">
+        <div style="font-weight:600;font-size:12px;margin-bottom:2px;">${i.name}</div>
+        <div style="font-size:10px;color:var(--text2);">${i.client} · ${i.sku}</div>
+        <div style="font-family:var(--mono);color:var(--accent);margin-top:4px;font-size:12px;">在庫: ${i.qty}個</div>
+      </div>`).join('') +
+    (items.length>4?`<div style="font-size:11px;color:var(--text2);text-align:center">他 ${items.length-4} 件</div>`:'');
+}
+
+function updateLocPreview() {
+  const a = document.getElementById('loc_area')?.value||'A';
+  const r = (document.getElementById('loc_row')?.value||'01').padStart(2,'0');
+  const c = (document.getElementById('loc_col')?.value||'01').padStart(2,'0');
+  const el = document.getElementById('locCodePreview');
+  if(el) el.textContent = `${a}-${r}-${c}`;
+}
+
+async function submitAddLoc() {
+  const area = document.getElementById('loc_area').value;
+  const row = document.getElementById('loc_row').value.padStart(2,'0');
+  const col = document.getElementById('loc_col').value.padStart(2,'0');
+  const max = document.getElementById('loc_max').value;
+  const note = document.getElementById('loc_note').value;
+  if(!row||!col){ toast('列番号・段番号を入力してください','error'); return; }
+  const code = `${area}-${row}-${col}`;
+  const result = await sb.insert('locations', {code, area, row_num:row, col_num:col, max_capacity:+max||100, note:note||null});
+  if(result){ closeModal('addLocModal'); toast('ロケーション登録: '+code); renderLoc(); }
+  else { toast('登録に失敗しました（重複の可能性）','error'); }
+}
+
+async function deleteLoc(id, code) {
+  if(!confirm(`ロケーション「${code}」を削除しますか？`)) return;
+  await sb.delete('locations', id);
+  toast(code+' を削除しました');
+  renderLoc();
 }
 
 // ── MODAL ──
@@ -876,6 +1139,7 @@ function openModal(id){
     document.getElementById('ob_dt').value=today;
     document.getElementById('ob_s').innerHTML=D.inv.map(i=>`<option value="${i.sku}">${i.sku} - ${i.name}</option>`).join('');
   }
+  if(id==='addLocModal') updateLocPreview();
   document.getElementById(id).classList.add('open');
 }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
@@ -894,9 +1158,24 @@ function filterInv(v){ renderInv(v||document.getElementById('invSearch')?.value|
 function switchTab(el){ el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
 document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
 
+// クライアントセレクトを動的に更新
+async function loadClientSelects() {
+  const clients = await sb.get('clients');
+  const names = clients.map(c=>c.name);
+  ['scanClient','ib_c','ob_c','ai_c'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&names.length) el.innerHTML=names.map(n=>`<option>${n}</option>`).join('');
+  });
+  ['clientFilt'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.innerHTML='<option value="">全クライアント</option>'+names.map(n=>`<option>${n}</option>`).join('');
+  });
+}
+
 // ── INIT ──
 renderDash();
 renderLoc();
+loadClientSelects();
 </script>
 </body>
 </html>
