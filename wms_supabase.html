@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LogiCore WMS</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0c10; --surface:#111318; --surface2:#181c24; --border:#1e2330;
+  --accent:#00e5a0; --accent2:#0066ff; --warn:#ff6b35;
+  --text:#e8eaf0; --text2:#7a8099; --text3:#3d4258;
+  --green:#00e5a0; --red:#ff4757; --yellow:#ffd32a; --blue:#0066ff;
+  --r:8px; --mono:'DM Mono',monospace; --sans:'Noto Sans JP',sans-serif; --disp:'Syne',sans-serif;
+  --sidebar-w:220px; --topbar-h:52px; --bottomnav-h:60px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;}
+.app{display:flex;height:100vh;overflow:hidden;}
+
+/* ── SIDEBAR (desktop) ── */
+.sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;flex-shrink:0;}
+.logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.logo-mark{width:32px;height:32px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-mark svg{width:18px;height:18px;fill:var(--bg);}
+.logo-text{font-family:var(--disp);font-weight:800;font-size:16px;}
+.logo-sub{font-family:var(--mono);font-size:9px;color:var(--text2);letter-spacing:.08em;}
+.nav-section{padding:12px 10px 6px;}
+.nav-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.12em;text-transform:uppercase;padding:0 8px;margin-bottom:4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r);cursor:pointer;transition:all .15s;color:var(--text2);font-size:12.5px;font-weight:500;border:1px solid transparent;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:rgba(0,229,160,.08);color:var(--accent);border-color:rgba(0,229,160,.15);}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;}
+.nav-badge{margin-left:auto;background:var(--accent);color:var(--bg);font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:20px;font-weight:500;}
+.nav-badge.warn{background:var(--warn);color:#fff;}
+.sidebar-footer{margin-top:auto;padding:12px;border-top:1px solid var(--border);}
+.user-pill{display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--r);background:var(--surface2);}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#fff;flex-shrink:0;}
+.user-name{font-size:12px;font-weight:500;}
+.user-role{font-family:var(--mono);font-size:9px;color:var(--text2);}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0;}
+.topbar{height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0;}
+.page-title{font-family:var(--disp);font-size:17px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar-right{display:flex;gap:8px;align-items:center;}
+.content{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
+.content::-webkit-scrollbar{width:4px;}
+.content::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+/* ── MOBILE EXTRAS ── */
+.mob-menu-btn,.mob-search-btn{display:none;background:none;border:none;color:var(--text2);cursor:pointer;padding:6px;}
+.mob-menu-btn svg,.mob-search-btn svg{width:20px;height:20px;display:block;}
+.mob-search-wrap{display:none;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);}
+.mob-search-wrap.open{display:flex;gap:8px;align-items:center;}
+.mob-search-wrap input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;}
+
+/* ── DRAWER (mobile) ── */
+.drawer-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;}
+.drawer-bg.open{display:block;}
+.drawer{position:fixed;top:0;left:-280px;width:260px;height:100vh;background:var(--surface);z-index:201;transition:left .25s ease;overflow-y:auto;display:flex;flex-direction:column;}
+.drawer.open{left:0;}
+
+/* ── BOTTOM NAV (mobile) ── */
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:var(--bottomnav-h);background:var(--surface);border-top:1px solid var(--border);z-index:100;grid-template-columns:repeat(7,1fr);align-items:stretch;}
+.bnav{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--text3);transition:color .15s;position:relative;padding:4px 2px;}
+.bnav.active{color:var(--accent);}
+.bnav svg{width:19px;height:19px;}
+.bnav-lbl{font-size:8px;font-weight:500;white-space:nowrap;}
+.bnav-dot{position:absolute;top:6px;right:calc(50% - 13px);width:6px;height:6px;border-radius:50%;background:var(--warn);}
+.bnav-scan-fab{width:42px;height:42px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:absolute;top:-16px;box-shadow:0 0 0 4px var(--bg);}
+.bnav-scan-fab svg{width:20px;height:20px;stroke:var(--bg);}
+
+/* ── COMPONENTS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r);border:none;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all .15s;white-space:nowrap;}
+.btn svg{width:13px;height:13px;}
+.btn-primary{background:var(--accent);color:var(--bg);}
+.btn-primary:hover{background:#00ffb3;}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--surface2);color:var(--text);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+.search-bar{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:7px 11px;flex:1;max-width:280px;}
+.search-bar input{background:none;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:12px;flex:1;min-width:0;}
+.search-bar svg{color:var(--text3);width:14px;height:14px;flex-shrink:0;}
+
+/* ── PAGES ── */
+.page{display:none;}
+.page.active{display:block;}
+
+/* ── KPI ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.kpi-card.green::before{background:var(--green);}
+.kpi-card.blue::before{background:var(--blue);}
+.kpi-card.yellow::before{background:var(--yellow);}
+.kpi-card.red::before{background:var(--red);}
+.kpi-label{font-family:var(--mono);font-size:9px;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;}
+.kpi-value{font-family:var(--disp);font-size:26px;font-weight:800;line-height:1;margin-bottom:3px;}
+.kpi-sub{font-size:10px;color:var(--text2);}
+.kpi-trend{font-family:var(--mono);font-size:10px;}
+.kpi-trend.up{color:var(--green);}
+.kpi-trend.down{color:var(--red);}
+
+/* ── CARD ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);}
+.card-title{font-family:var(--disp);font-size:13px;font-weight:700;}
+.card-body{padding:14px;}
+.mb-12{margin-bottom:12px;}.mb-16{margin-bottom:16px;}
+
+/* ── GRID ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.grid-3{display:grid;grid-template-columns:2fr 1fr;gap:12px;}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;padding:8px 10px;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;}
+td{padding:9px 10px;border-bottom:1px solid var(--border);font-size:12px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--surface2);}
+
+/* ── BADGE ── */
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-family:var(--mono);font-size:9px;font-weight:500;white-space:nowrap;}
+.badge-green{background:rgba(0,229,160,.12);color:var(--green);border:1px solid rgba(0,229,160,.2);}
+.badge-red{background:rgba(255,71,87,.12);color:var(--red);border:1px solid rgba(255,71,87,.2);}
+.badge-yellow{background:rgba(255,211,42,.12);color:var(--yellow);border:1px solid rgba(255,211,42,.2);}
+.badge-blue{background:rgba(0,102,255,.12);color:#4d9fff;border:1px solid rgba(0,102,255,.2);}
+.badge-gray{background:rgba(122,128,153,.12);color:var(--text2);border:1px solid rgba(122,128,153,.2);}
+
+/* ── FORM ── */
+.form-grid{display:flex;flex-direction:column;gap:11px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-label{font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:.06em;}
+.form-input,.form-select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color .15s;width:100%;}
+.form-input:focus,.form-select:focus{border-color:var(--accent);}
+.form-select option{background:var(--surface2);}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;padding:3px;background:var(--surface2);border-radius:8px;margin-bottom:14px;}
+.tab{flex:1;text-align:center;padding:7px 4px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:500;color:var(--text2);transition:all .15s;white-space:nowrap;}
+.tab.active{background:var(--surface);color:var(--text);}
+
+/* ── SCAN ── */
+.scan-box{background:var(--surface2);border:2px dashed var(--border);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px;}
+.scan-box:hover,.scan-box.active{border-color:var(--accent);background:rgba(0,229,160,.04);}
+.scan-icon{font-size:36px;margin-bottom:10px;}
+.scan-code{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--accent);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;letter-spacing:.1em;margin:12px 0;min-height:50px;display:flex;align-items:center;justify-content:center;}
+
+/* ── ALERT ── */
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-left:2px solid transparent;margin-bottom:4px;border-radius:0 6px 6px 0;background:var(--surface2);}
+.alert-item.warn{border-color:var(--warn);}
+.alert-item.error{border-color:var(--red);}
+.alert-item.info{border-color:var(--blue);}
+.alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+
+/* ── CLIENT CARDS ── */
+.client-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.client-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;cursor:pointer;transition:all .15s;}
+.client-card:hover{border-color:var(--accent);}
+.client-logo{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin-bottom:10px;}
+.client-name{font-family:var(--disp);font-size:13px;font-weight:700;margin-bottom:3px;}
+.client-stats{display:flex;gap:14px;margin-top:10px;}
+.cstat-val{font-family:var(--disp);font-size:18px;font-weight:700;}
+.cstat-lbl{font-family:var(--mono);font-size:9px;color:var(--text2);}
+
+/* ── LOCATION ── */
+.loc-row{display:flex;gap:3px;align-items:center;margin-bottom:3px;}
+.loc-label{font-family:var(--mono);font-size:9px;color:var(--text3);width:22px;flex-shrink:0;}
+.loc-cell{width:26px;height:26px;border-radius:4px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;cursor:pointer;transition:all .15s;background:var(--surface2);color:var(--text3);}
+.loc-cell.low{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.2);color:var(--green);}
+.loc-cell.mid{background:rgba(255,211,42,.1);border-color:rgba(255,211,42,.2);color:var(--yellow);}
+.loc-cell.full{background:rgba(255,71,87,.1);border-color:rgba(255,71,87,.2);color:var(--red);}
+.loc-cell:hover{transform:scale(1.1);z-index:2;}
+.loc-legend{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
+.loc-legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);}
+.legend-dot{width:8px;height:8px;border-radius:2px;}
+.progress-bar{background:var(--surface2);border-radius:4px;height:6px;overflow:hidden;}
+.progress-fill{height:100%;border-radius:4px;transition:width .3s;}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;}
+.modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;}
+.modal-title{font-family:var(--disp);font-size:15px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--text2);cursor:pointer;font-size:22px;line-height:1;padding:0 4px;}
+.modal-body{padding:18px;}
+.modal-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:var(--surface);}
+
+/* ── TOAST ── */
+.toast-wrap{position:fixed;bottom:76px;right:12px;z-index:400;display:flex;flex-direction:column;gap:6px;}
+.toast{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:190px;max-width:270px;display:flex;align-items:center;gap:8px;animation:slideUp .2s ease;font-size:12px;}
+.toast.success{border-color:rgba(0,229,160,.3);}
+.toast.error{border-color:rgba(255,71,87,.3);}
+@keyframes slideUp{from{transform:translateY(14px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+
+/* ── UTILS ── */
+.flex{display:flex;}.gap-8{gap:8px;}.items-center{align-items:center;}.justify-between{justify-content:space-between;}
+.text-mono{font-family:var(--mono);}.text-sm{font-size:11px;color:var(--text2);}.text-accent{color:var(--accent);}
+
+/* ═══════════ RESPONSIVE ═══════════ */
+@media(max-width:768px){
+  .sidebar{display:none;}
+  .bottom-nav{display:grid !important;}
+  .mob-menu-btn,.mob-search-btn{display:block;}
+  .desk-search,.desk-add{display:none !important;}
+  .content{padding:12px;padding-bottom:calc(var(--bottomnav-h) + 12px);}
+  .topbar{padding:0 10px;}
+  .toast-wrap{bottom:calc(var(--bottomnav-h) + 6px);}
+  /* KPI 2-col */
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:8px;}
+  .kpi-value{font-size:22px;}
+  /* grids stack */
+  .grid-2,.grid-3{grid-template-columns:1fr;}
+  .client-grid{grid-template-columns:1fr 1fr;}
+  /* form rows stack */
+  .form-row{grid-template-columns:1fr;}
+  /* hide less-important columns */
+  .hm{display:none !important;}
+  /* modal slides up from bottom */
+  .modal-overlay{padding:0;align-items:flex-end;}
+  .modal{border-radius:16px 16px 0 0;max-height:88vh;}
+  .page-title{font-size:15px;}
+}
+@media(max-width:480px){
+  .client-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── SIDEBAR ── -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <div><div class="logo-text">LogiCore</div><div class="logo-sub">WMS v2.1</div></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">メイン</div>
+    <div class="nav-item active" onclick="goPage('dashboard',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>ダッシュボード</div>
+    <div class="nav-item" onclick="goPage('clients',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>クライアント<span class="nav-badge">4</span></div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">入出庫</div>
+    <div class="nav-item" onclick="goPage('inbound',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>入庫処理<span class="nav-badge warn">3</span></div>
+    <div class="nav-item" onclick="goPage('outbound',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>出庫処理</div>
+    <div class="nav-item" onclick="goPage('scan',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M16 12h1"/></svg>スキャン</div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">在庫</div>
+    <div class="nav-item" onclick="goPage('inventory',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>在庫一覧</div>
+    <div class="nav-item" onclick="goPage('location',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-pill"><div class="avatar">田</div><div><div class="user-name">田中 太郎</div><div class="user-role">倉庫管理者</div></div></div>
+  </div>
+</nav>
+
+<!-- ── DRAWER ── -->
+<div class="drawer-bg" id="dBg" onclick="closeDrawer()"></div>
+<nav class="drawer" id="drawer">
+  <div class="logo" style="padding:16px 14px;">
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <div><div class="logo-text">LogiCore</div><div class="logo-sub">WMS v2.1</div></div>
+  </div>
+  <div style="padding:6px 8px;flex:1;">
+    <div class="nav-item active" id="dNav-dashboard" onclick="goPage('dashboard');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>ダッシュボード</div>
+    <div class="nav-item" onclick="goPage('clients');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>クライアント管理</div>
+    <div style="height:1px;background:var(--border);margin:6px 2px;"></div>
+    <div class="nav-item" onclick="goPage('inbound');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>入庫処理</div>
+    <div class="nav-item" onclick="goPage('outbound');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/></svg>出庫処理</div>
+    <div class="nav-item" onclick="goPage('scan');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/></svg>スキャン</div>
+    <div style="height:1px;background:var(--border);margin:6px 2px;"></div>
+    <div class="nav-item" onclick="goPage('inventory');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>在庫一覧</div>
+    <div class="nav-item" onclick="goPage('location');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
+  </div>
+  <div class="sidebar-footer"><div class="user-pill"><div class="avatar">田</div><div><div class="user-name">田中 太郎</div><div class="user-role">倉庫管理者</div></div></div></div>
+</nav>
+
+<!-- ── MAIN ── -->
+<div class="main">
+  <div class="topbar">
+    <button class="mob-menu-btn" onclick="openDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <div class="page-title" id="pageTitle">ダッシュボード</div>
+    <div class="topbar-right">
+      <div class="search-bar desk-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="商品・SKU・バーコード..." oninput="handleSearch(this.value)"></div>
+      <button class="mob-search-btn" onclick="toggleMobSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+      <button class="btn btn-primary desk-add" onclick="openModal('inboundModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>クイック登録</button>
+    </div>
+  </div>
+  <div class="mob-search-wrap" id="mobSearch">
+    <input type="text" placeholder="商品・SKU・バーコードで検索..." oninput="handleSearch(this.value)">
+    <button class="btn btn-ghost btn-sm" onclick="toggleMobSearch()">✕</button>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="kpi-grid">
+        <div class="kpi-card green"><div class="kpi-label">総在庫SKU</div><div class="kpi-value">1,248</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend up">↑+23</span><span>今月</span></div></div>
+        <div class="kpi-card blue"><div class="kpi-label">本日入庫</div><div class="kpi-value">84</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend up">↑+12%</span><span>前日比</span></div></div>
+        <div class="kpi-card yellow"><div class="kpi-label">本日出庫</div><div class="kpi-value">126</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend down">↓-5%</span><span>前日比</span></div></div>
+        <div class="kpi-card red"><div class="kpi-label">使用率</div><div class="kpi-value">73%</div><div class="kpi-sub" style="margin-top:2px;">空き 270/1,000</div></div>
+      </div>
+      <div class="grid-3 mb-12">
+        <div class="card">
+          <div class="card-header"><div class="card-title">週次入出庫トレンド</div><span class="text-sm">過去7日</span></div>
+          <div class="card-body">
+            <div style="display:flex;gap:12px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:var(--accent);border-radius:2px;"></div>入庫</div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:rgba(0,102,255,.6);border-radius:2px;"></div>出庫</div>
+            </div>
+            <div style="display:flex;gap:3px;align-items:flex-end;height:70px;" id="trendChart"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">アラート</div><span class="badge badge-red">3件</span></div>
+          <div class="card-body" style="padding:10px;">
+            <div class="alert-item error"><div class="alert-dot" style="background:var(--red)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">在庫切れ警告</div><div class="text-sm">SKU-00124 / 残2個</div></div></div>
+            <div class="alert-item warn"><div class="alert-dot" style="background:var(--warn)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">期限切れ接近</div><div class="text-sm">LOT-2024-089 / 残7日</div></div></div>
+            <div class="alert-item info"><div class="alert-dot" style="background:var(--blue)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">入荷予定</div><div class="text-sm">鈴木商事 / 明日10:00</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">最近の操作履歴</div><button class="btn btn-ghost btn-sm" onclick="goPage('inventory')">すべて表示</button></div>
+        <div class="table-wrap"><table><thead><tr><th>種別</th><th>商品名</th><th class="hm">クライアント</th><th>数量</th><th class="hm">ロケーション</th><th>時刻</th><th>状態</th></tr></thead><tbody id="recentTbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- CLIENTS -->
+    <div class="page" id="page-clients">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <button class="btn btn-primary" onclick="openModal('addClientModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>追加</button>
+      </div>
+      <div class="client-grid" id="clientGrid"></div>
+    </div>
+
+    <!-- INBOUND -->
+    <div class="page" id="page-inbound">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;">
+        <div class="tabs" style="flex:0 0 auto;"><div class="tab active" onclick="switchTab(this)">受付待ち</div><div class="tab" onclick="switchTab(this)">完了</div></div>
+        <button class="btn btn-primary" onclick="openModal('inboundModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>入庫登録</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>商品名</th><th class="hm">クライアント</th><th>予定数</th><th class="hm">格納先</th><th class="hm">入荷日</th><th>状態</th><th>操作</th></tr></thead><tbody id="inboundTbody"></tbody></table></div></div>
+    </div>
+
+    <!-- OUTBOUND -->
+    <div class="page" id="page-outbound">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <button class="btn btn-primary" onclick="openModal('outboundModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>出庫登録</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table><thead><tr><th>ID</th><th>商品名</th><th class="hm">クライアント</th><th>数量</th><th class="hm">出荷先</th><th class="hm">指示日</th><th>状態</th><th>操作</th></tr></thead><tbody id="outboundTbody"></tbody></table></div></div>
+    </div>
+
+    <!-- SCAN -->
+    <div class="page" id="page-scan">
+      <div class="grid-2">
+        <div>
+          <div class="card mb-12">
+            <div class="card-header"><div class="card-title">バーコード/QRスキャン</div></div>
+            <div class="card-body">
+              <div class="scan-box" id="scanBox" onclick="simulateScan()">
+                <div class="scan-icon">📷</div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:3px;">タップしてスキャン</div>
+                <div class="text-sm">またはバーコードリーダーで読み取り</div>
+              </div>
+              <div class="form-group" style="margin-bottom:10px;">
+                <div class="form-label">手動入力</div>
+                <div style="display:flex;gap:8px;"><input class="form-input" id="manualBC" placeholder="バーコード番号..." oninput="lookupBC(this.value)"><button class="btn btn-primary btn-sm" onclick="lookupBC(document.getElementById('manualBC').value)">検索</button></div>
+              </div>
+              <div class="scan-code" id="scanResult">—</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">スキャン操作</div></div>
+            <div class="card-body">
+              <div class="tabs"><div class="tab active" onclick="switchTab(this)">入庫</div><div class="tab" onclick="switchTab(this)">出庫</div><div class="tab" onclick="switchTab(this)">移動</div></div>
+              <div class="form-grid">
+                <div class="form-group"><div class="form-label">クライアント</div><select class="form-select" id="scanClient"><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select></div>
+                <div class="form-row">
+                  <div class="form-group"><div class="form-label">ロケーション</div><input class="form-input" placeholder="A-01-01" id="scanLoc"></div>
+                  <div class="form-group"><div class="form-label">数量</div><input class="form-input" type="number" value="1" id="scanQty"></div>
+                </div>
+                <button class="btn btn-primary" style="width:100%;" onclick="processScan()">処理実行</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">スキャン履歴</div><span class="text-sm" id="scanCount">本日: 0件</span></div>
+          <div class="table-wrap"><table><thead><tr><th>時刻</th><th class="hm">バーコード</th><th>商品</th><th>数量</th></tr></thead><tbody id="scanTbody"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="page" id="page-inventory">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="search-bar" style="max-width:none;flex:1;min-width:160px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="商品名・SKU・バーコード..." id="invSearch" oninput="filterInv(this.value)"></div>
+        <select class="form-select" style="width:150px;flex-shrink:0;" id="clientFilt" onchange="filterInv()"><option value="">全クライアント</option><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select>
+        <button class="btn btn-primary" onclick="openModal('addItemModal')">商品追加</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table><thead><tr><th>SKU</th><th class="hm">バーコード</th><th>商品名</th><th class="hm">クライアント</th><th>在庫数</th><th class="hm">ロケーション</th><th class="hm">期限</th><th>状態</th><th>操作</th></tr></thead><tbody id="invTbody"></tbody></table></div></div>
+    </div>
+
+    <!-- LOCATION -->
+    <div class="page" id="page-location">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">倉庫ロケーションマップ</div></div>
+          <div class="card-body" style="overflow-x:auto;">
+            <div id="locMap"></div>
+            <div class="loc-legend">
+              <div class="loc-legend-item"><div class="legend-dot" style="background:var(--surface2);border:1px solid var(--border);"></div>空き</div>
+              <div class="loc-legend-item"><div class="legend-dot" style="background:rgba(0,229,160,.3);"></div>低</div>
+              <div class="loc-legend-item"><div class="legend-dot" style="background:rgba(255,211,42,.3);"></div>中</div>
+              <div class="loc-legend-item"><div class="legend-dot" style="background:rgba(255,71,87,.3);"></div>高</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card mb-12"><div class="card-header"><div class="card-title">ロケーション詳細</div></div><div class="card-body" id="locDetail"><div style="text-align:center;padding:20px;color:var(--text3);"><div style="font-size:28px;margin-bottom:6px;">📦</div><div>ロケーションを選択</div></div></div></div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">エリア別使用率</div></div>
+            <div class="card-body">
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアA (冷蔵)</span><span style="font-family:var(--mono);font-size:11px;">68%</span></div><div class="progress-bar"><div class="progress-fill" style="width:68%;background:var(--yellow);"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアB (常温)</span><span style="font-family:var(--mono);font-size:11px;">82%</span></div><div class="progress-bar"><div class="progress-fill" style="width:82%;background:var(--red);"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:12px;">エリアC (危険物)</span><span style="font-family:var(--mono);font-size:11px;">34%</span></div><div class="progress-bar"><div class="progress-fill" style="width:34%;background:var(--green);"></div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav" id="bottomNav">
+    <div class="bnav active" id="bn-dashboard" onclick="goPage('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="bnav-lbl">ホーム</span>
+    </div>
+    <div class="bnav" id="bn-clients" onclick="goPage('clients')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      <span class="bnav-lbl">顧客</span>
+    </div>
+    <div class="bnav" id="bn-inbound" onclick="goPage('inbound')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>
+      <span class="bnav-lbl">入庫</span>
+      <div class="bnav-dot"></div>
+    </div>
+    <div class="bnav" id="bn-scan" onclick="goPage('scan')" style="position:relative;">
+      <div class="bnav-scan-fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/></svg></div>
+      <span class="bnav-lbl" style="margin-top:14px;">スキャン</span>
+    </div>
+    <div class="bnav" id="bn-outbound" onclick="goPage('outbound')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/></svg>
+      <span class="bnav-lbl">出庫</span>
+    </div>
+    <div class="bnav" id="bn-inventory" onclick="goPage('inventory')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+      <span class="bnav-lbl">在庫</span>
+    </div>
+    <div class="bnav" id="bn-location" onclick="goPage('location')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span class="bnav-lbl">ロケ</span>
+    </div>
+  </nav>
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MODALS -->
+<div class="modal-overlay" id="inboundModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">入庫登録</div><button class="modal-close" onclick="closeModal('inboundModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-row"><div class="form-group"><div class="form-label">クライアント *</div><select class="form-select" id="ib_c"><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select></div><div class="form-group"><div class="form-label">SKU *</div><input class="form-input" id="ib_s" placeholder="SKU-00001"></div></div>
+        <div class="form-group"><div class="form-label">商品名 *</div><input class="form-input" id="ib_n" placeholder="商品名"></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">バーコード</div><input class="form-input" id="ib_b" placeholder="4901234567890"></div><div class="form-group"><div class="form-label">予定数量 *</div><input class="form-input" type="number" id="ib_q" placeholder="0"></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">格納先 *</div><input class="form-input" id="ib_l" placeholder="A-01-01"></div><div class="form-group"><div class="form-label">ロット番号</div><input class="form-input" id="ib_lot" placeholder="LOT-2025-001"></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">入荷日 *</div><input class="form-input" type="date" id="ib_d"></div><div class="form-group"><div class="form-label">賞味期限</div><input class="form-input" type="date" id="ib_e"></div></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('inboundModal')">キャンセル</button><button class="btn btn-primary" onclick="submitInbound()">登録</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="outboundModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">出庫登録</div><button class="modal-close" onclick="closeModal('outboundModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-row"><div class="form-group"><div class="form-label">クライアント *</div><select class="form-select" id="ob_c"><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select></div><div class="form-group"><div class="form-label">SKU *</div><select class="form-select" id="ob_s"></select></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">数量 *</div><input class="form-input" type="number" id="ob_q" placeholder="0"></div><div class="form-group"><div class="form-label">出荷先 *</div><input class="form-input" id="ob_d" placeholder="東京都..."></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">指示日 *</div><input class="form-input" type="date" id="ob_dt"></div><div class="form-group"><div class="form-label">優先度</div><select class="form-select" id="ob_p"><option>通常</option><option>急ぎ</option><option>特急</option></select></div></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('outboundModal')">キャンセル</button><button class="btn btn-primary" onclick="submitOutbound()">登録</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addItemModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">商品マスタ登録</div><button class="modal-close" onclick="closeModal('addItemModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-row"><div class="form-group"><div class="form-label">SKU *</div><input class="form-input" id="ai_s" placeholder="SKU-00001"></div><div class="form-group"><div class="form-label">バーコード</div><input class="form-input" id="ai_b" placeholder="4901234567890"></div></div>
+        <div class="form-group"><div class="form-label">商品名 *</div><input class="form-input" id="ai_n"></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">クライアント *</div><select class="form-select" id="ai_c"><option>（株）鈴木商事</option><option>田中フーズ株式会社</option><option>ABC Logistics</option><option>東京ファッション</option></select></div><div class="form-group"><div class="form-label">初期在庫</div><input class="form-input" type="number" id="ai_q" value="0"></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">ロケーション</div><input class="form-input" id="ai_l" placeholder="A-01-01"></div><div class="form-group"><div class="form-label">最低在庫</div><input class="form-input" type="number" id="ai_m" value="10"></div></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('addItemModal')">キャンセル</button><button class="btn btn-primary" onclick="submitAddItem()">登録</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addClientModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">クライアント登録</div><button class="modal-close" onclick="closeModal('addClientModal')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><div class="form-label">会社名 *</div><input class="form-input" id="cl_n" placeholder="株式会社〇〇"></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">担当者名</div><input class="form-input" id="cl_c" placeholder="山田 太郎"></div><div class="form-group"><div class="form-label">連絡先</div><input class="form-input" id="cl_p" placeholder="03-0000-0000"></div></div>
+        <div class="form-group"><div class="form-label">メール</div><input class="form-input" id="cl_e" placeholder="contact@example.com"></div>
+        <div class="form-group"><div class="form-label">割当エリア</div><select class="form-select" id="cl_a"><option>エリアA (冷蔵)</option><option>エリアB (常温)</option><option>エリアC (危険物)</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('addClientModal')">キャンセル</button><button class="btn btn-primary" onclick="submitAddClient()">登録</button></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+
+<script>
+// ═══════════════════════════════════════════════════
+// SUPABASE 接続設定
+// ═══════════════════════════════════════════════════
+const SUPABASE_URL = 'https://fpobnehdqamuqlepfkrf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwb2JuZWhkcWFtdXFsZXBma3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTEzMDIsImV4cCI6MjA5MDc4NzMwMn0._Io2LvqCrqe3ZTmQgNpInu_iNAaCqK8Hn-Xp5Ijsnd8';
+
+// Supabase REST API ヘルパー
+const sb = {
+  async get(table, params='') {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc${params}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    return r.ok ? r.json() : [];
+  },
+  async insert(table, data) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(data)
+    });
+    return r.ok ? r.json() : null;
+  },
+  async update(table, id, data) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify(data)
+    });
+    return r.ok ? r.json() : null;
+  },
+  async delete(table, id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+  }
+};
+
+// ── ローカルキャッシュ（表示高速化用）──
+const D = { inv:[], ib:[], ob:[], clients:[], scanN:0 };
+
+// ── ローディング表示 ──
+function showLoading(tbodyId) {
+  const el = document.getElementById(tbodyId);
+  if(el) el.innerHTML = `<tr><td colspan="20" style="text-align:center;padding:24px;color:var(--text2)"><span style="font-family:var(--mono);font-size:12px">読み込み中...</span></td></tr>`;
+}
+function showEmpty(tbodyId, msg='データがありません') {
+  const el = document.getElementById(tbodyId);
+  if(el) el.innerHTML = `<tr><td colspan="20" style="text-align:center;padding:24px;color:var(--text3)"><span style="font-size:20px;display:block;margin-bottom:6px">📭</span><span style="font-size:12px">${msg}</span></td></tr>`;
+}
+
+// ── ナビゲーション ──
+const titles={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',location:'ロケーション管理'};
+function goPage(p,el){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.getElementById('pageTitle').textContent=titles[p]||p;
+  document.querySelectorAll('.sidebar .nav-item').forEach(x=>x.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.querySelectorAll('.bnav').forEach(x=>x.classList.remove('active'));
+  const bn=document.getElementById('bn-'+p); if(bn) bn.classList.add('active');
+  const renders={dashboard:renderDash,clients:renderClients,inbound:renderIB,outbound:renderOB,inventory:()=>renderInv(),location:renderLoc};
+  if(renders[p]) renders[p]();
+}
+function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('dBg').classList.add('open');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('dBg').classList.remove('open');}
+function toggleMobSearch(){document.getElementById('mobSearch').classList.toggle('open');}
+
+// ── DASHBOARD ──
+async function renderDash() {
+  // トレンドチャート
+  const hin=[45,70,55,90,60,40,75], hout=[60,55,80,65,90,30,85], days=['月','火','水','木','金','土','今日'];
+  document.getElementById('trendChart').innerHTML = days.map((d,i)=>`
+    <div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;">
+      <div style="flex:1;display:flex;gap:1px;align-items:flex-end;width:100%;">
+        <div style="flex:1;background:${i===6?'var(--accent)':'rgba(0,229,160,.3)'};height:${hin[i]}%;border-radius:2px 2px 0 0;"></div>
+        <div style="flex:1;background:${i===6?'rgba(0,102,255,.7)':'rgba(0,102,255,.35)'};height:${hout[i]}%;border-radius:2px 2px 0 0;"></div>
+      </div>
+      <span style="font-family:var(--mono);font-size:8px;color:${i===6?'var(--accent)':'var(--text3)'};">${d}</span>
+    </div>`).join('');
+
+  // 最近の操作（inbound + outbound 合わせて最新5件）
+  showLoading('recentTbody');
+  const [ibData, obData] = await Promise.all([
+    sb.get('inbound', '&limit=3'),
+    sb.get('outbound', '&limit=3')
+  ]);
+  const recent = [
+    ...ibData.map(r=>({type:'入庫',name:r.name,client:r.client,qty:r.planned,loc:r.location,t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status})),
+    ...obData.map(r=>({type:'出庫',name:r.name,client:r.client,qty:r.qty,loc:'—',t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status}))
+  ].sort((a,b)=>b.t.localeCompare(a.t)).slice(0,5);
+
+  if(!recent.length){ showEmpty('recentTbody','まだ操作履歴がありません'); return; }
+  document.getElementById('recentTbody').innerHTML = recent.map(r=>`
+    <tr>
+      <td><span class="badge ${r.type==='入庫'?'badge-green':'badge-blue'}">${r.type}</span></td>
+      <td>${r.name}</td>
+      <td class="hm" style="font-size:11px">${r.client}</td>
+      <td style="font-family:var(--mono)">${r.qty}</td>
+      <td class="hm" style="font-family:var(--mono)">${r.loc}</td>
+      <td style="font-family:var(--mono);color:var(--text2)">${r.t}</td>
+      <td><span class="badge ${r.st==='完了'||r.st==='出荷済み'?'badge-green':'badge-yellow'}">${r.st}</span></td>
+    </tr>`).join('');
+}
+
+// ── CLIENTS ──
+async function renderClients() {
+  const grid = document.getElementById('clientGrid');
+  grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text2);font-size:12px">読み込み中...</div>`;
+  D.clients = await sb.get('clients');
+  const invData = await sb.get('inventory');
+  const invCount = {};
+  invData.forEach(i=>{ invCount[i.client]=(invCount[i.client]||0)+i.qty; });
+  const ibData = await sb.get('inbound');
+
+  if(!D.clients.length){
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3)"><div style="font-size:32px;margin-bottom:8px">🏢</div><div>クライアントを追加してください</div></div>`;
+    return;
+  }
+  const colors=['#0066ff','#00e5a0','#ff6b35','#ffd32a','#9b59b6'];
+  grid.innerHTML = D.clients.map((c,i)=>`
+    <div class="client-card">
+      <div class="client-logo" style="background:${(c.color||colors[i%5])}22;color:${c.color||colors[i%5]};">${c.name.slice(0,2)}</div>
+      <div class="client-name">${c.name}</div>
+      <div style="font-size:11px;color:var(--text2);">${c.contact||'—'}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${c.area||'—'}</div>
+      <div class="client-stats">
+        <div class="cstat"><div class="cstat-val" style="color:${c.color||colors[i%5]}">${invData.filter(x=>x.client===c.name).length}</div><div class="cstat-lbl">SKU</div></div>
+        <div class="cstat"><div class="cstat-val">${invCount[c.name]||0}</div><div class="cstat-lbl">在庫</div></div>
+        <div class="cstat"><div class="cstat-val">${ibData.filter(x=>x.client===c.name&&x.status!=='完了').length}</div><div class="cstat-lbl">入庫待</div></div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="goPage('inventory')">在庫確認</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── INBOUND ──
+async function renderIB() {
+  showLoading('inboundTbody');
+  D.ib = await sb.get('inbound');
+  if(!D.ib.length){ showEmpty('inboundTbody','入庫データがありません'); return; }
+  document.getElementById('inboundTbody').innerHTML = D.ib.map(r=>`
+    <tr>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text2)">${r.order_id||r.id.slice(0,8)}</td>
+      <td>${r.name}</td>
+      <td class="hm" style="font-size:11px">${r.client}</td>
+      <td style="font-family:var(--mono)">${r.planned}</td>
+      <td class="hm" style="font-family:var(--mono)">${r.location||'—'}</td>
+      <td class="hm" style="font-family:var(--mono);color:var(--text2)">${r.date||'—'}</td>
+      <td><span class="badge ${r.status==='完了'?'badge-green':'badge-yellow'}">${r.status}</span></td>
+      <td>${r.status!=='完了'?`<button class="btn btn-primary btn-sm" onclick="complIB('${r.id}')">完了</button>`:'—'}</td>
+    </tr>`).join('');
+}
+
+// ── OUTBOUND ──
+async function renderOB() {
+  showLoading('outboundTbody');
+  D.ob = await sb.get('outbound');
+  if(!D.ob.length){ showEmpty('outboundTbody','出庫データがありません'); return; }
+  document.getElementById('outboundTbody').innerHTML = D.ob.map(r=>`
+    <tr>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text2)">${r.order_id||r.id.slice(0,8)}</td>
+      <td>${r.name}</td>
+      <td class="hm" style="font-size:11px">${r.client}</td>
+      <td style="font-family:var(--mono)">${r.qty}</td>
+      <td class="hm" style="font-size:11px">${r.destination||'—'}</td>
+      <td class="hm" style="font-family:var(--mono);color:var(--text2)">${r.date||'—'}</td>
+      <td><span class="badge ${r.status==='出荷済み'?'badge-green':'badge-yellow'}">${r.status}</span></td>
+      <td>${r.status!=='出荷済み'?`<button class="btn btn-primary btn-sm" onclick="complOB('${r.id}')">完了</button>`:'—'}</td>
+    </tr>`).join('');
+}
+
+// ── INVENTORY ──
+async function renderInv(f='') {
+  showLoading('invTbody');
+  D.inv = await sb.get('inventory');
+  const cf = document.getElementById('clientFilt')?.value||'';
+  let d = D.inv;
+  if(f) d = d.filter(i=>i.name.includes(f)||i.sku.includes(f)||(i.barcode||'').includes(f));
+  if(cf) d = d.filter(i=>i.client===cf);
+  if(!d.length){ showEmpty('invTbody', f||cf ? '検索結果がありません' : '商品を追加してください'); return; }
+  document.getElementById('invTbody').innerHTML = d.map(i=>`
+    <tr>
+      <td style="font-family:var(--mono)">${i.sku}</td>
+      <td class="hm" style="font-family:var(--mono);font-size:10px;color:var(--text2)">${i.barcode||'—'}</td>
+      <td>${i.name}</td>
+      <td class="hm" style="font-size:11px">${i.client}</td>
+      <td style="font-family:var(--mono);color:${i.qty<=5?'var(--red)':i.qty<=20?'var(--yellow)':'var(--text)'};font-weight:600">${i.qty}</td>
+      <td class="hm" style="font-family:var(--mono)">${i.location||'—'}</td>
+      <td class="hm" style="font-family:var(--mono);font-size:10px;color:${i.expiry&&i.expiry!=='—'&&new Date(i.expiry)<new Date(Date.now()+30*864e5)?'var(--red)':'var(--text2)'}">${i.expiry||'—'}</td>
+      <td><span class="badge ${i.status==='正常'?'badge-green':i.status==='残少'?'badge-red':'badge-yellow'}">${i.status||'正常'}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="deleteItem('${i.id}','${i.name}')">削除</button></td>
+    </tr>`).join('');
+}
+
+// ── LOCATION ──
+function renderLoc() {
+  const rows=['A','B','C','D','E','F','G','H'], cols=Array.from({length:10},(_,i)=>String(i+1).padStart(2,'0'));
+  const sts=['empty','empty','low','low','mid','mid','full','low','empty','mid'];
+  const map = document.getElementById('locMap');
+  map.innerHTML = '<div class="loc-row"><div class="loc-label"></div>'+cols.map(c=>`<div class="loc-label" style="text-align:center;font-size:8px">${c}</div>`).join('')+'</div>' +
+    rows.map(r=>'<div class="loc-row"><div class="loc-label">'+r+'</div>'+cols.map((c,i)=>{
+      const st=sts[(i+r.charCodeAt(0))%sts.length];
+      return `<div class="loc-cell ${st}" onclick="showLocDet('${r}-${c}')" title="${r}-${c}">${st!=='empty'?'●':''}</div>`;
+    }).join('')+'</div>').join('');
+}
+async function showLocDet(loc) {
+  const d = document.getElementById('locDetail');
+  d.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text2);font-size:12px">読み込み中...</div>`;
+  const items = await sb.get('inventory', `&location=like.${loc[0]}*`);
+  if(!items.length){
+    d.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)"><div style="font-size:24px;margin-bottom:6px">📭</div><div style="font-family:var(--mono);color:var(--accent)">${loc}</div><div style="margin-top:4px">空きロケーション</div></div>`;
+    return;
+  }
+  d.innerHTML = `<div style="font-family:var(--mono);color:var(--accent);margin-bottom:10px;">📦 ${loc}</div>` +
+    items.slice(0,3).map(i=>`
+      <div style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:6px;">
+        <div style="font-weight:600;font-size:12px;margin-bottom:2px;">${i.name}</div>
+        <div style="font-size:10px;color:var(--text2);">${i.client} · ${i.sku}</div>
+        <div style="font-family:var(--mono);color:var(--accent);margin-top:4px;">在庫: ${i.qty}</div>
+      </div>`).join('');
+}
+
+// ── ACTIONS ──
+async function complIB(id) {
+  await sb.update('inbound', id, {status:'完了', actual: D.ib.find(x=>x.id===id)?.planned||0});
+  toast('受入完了');
+  renderIB();
+}
+async function complOB(id) {
+  await sb.update('outbound', id, {status:'出荷済み'});
+  toast('出荷完了');
+  renderOB();
+}
+async function deleteItem(id, name) {
+  if(!confirm(`「${name}」を削除しますか？`)) return;
+  await sb.delete('inventory', id);
+  toast(name+' を削除しました');
+  renderInv();
+}
+
+async function submitInbound() {
+  const [c,s,n,q,l,lot,d,e,b] = ['ib_c','ib_s','ib_n','ib_q','ib_l','ib_lot','ib_d','ib_e','ib_b'].map(id=>document.getElementById(id).value);
+  if(!n||!s||!q||!l){ toast('必須項目を入力してください','error'); return; }
+  const orderId = 'IN-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
+  const result = await sb.insert('inbound', {order_id:orderId, client:c, name:n, sku:s, planned:+q, actual:0, location:l, date:d||new Date().toISOString().slice(0,10), status:'受付待ち'});
+  if(result) {
+    if(b) await sb.insert('inventory', {sku:s, barcode:b, name:n, client:c, qty:0, location:l, lot:lot||null, expiry:e||null, status:'正常'});
+    closeModal('inboundModal');
+    toast('入庫登録: '+orderId);
+    renderIB();
+  } else { toast('登録に失敗しました','error'); }
+}
+
+async function submitOutbound() {
+  const c=document.getElementById('ob_c').value, s=document.getElementById('ob_s').value;
+  const q=+document.getElementById('ob_q').value, dest=document.getElementById('ob_d').value;
+  const dt=document.getElementById('ob_dt').value||new Date().toISOString().slice(0,10);
+  if(!s||!q||!dest){ toast('必須項目を入力してください','error'); return; }
+  const invItem = D.inv.find(i=>i.sku===s);
+  if(invItem&&invItem.qty<q){ toast('在庫不足 (現在庫: '+invItem.qty+')','error'); return; }
+  const orderId = 'OUT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
+  const result = await sb.insert('outbound', {order_id:orderId, client:c, name:invItem?invItem.name:s, sku:s, qty:q, destination:dest, date:dt, status:'ピッキング待ち'});
+  if(result) {
+    if(invItem) await sb.update('inventory', invItem.id, {qty: invItem.qty - q});
+    closeModal('outboundModal');
+    toast('出庫登録: '+orderId);
+    renderOB();
+  } else { toast('登録に失敗しました','error'); }
+}
+
+async function submitAddItem() {
+  const s=document.getElementById('ai_s').value, b=document.getElementById('ai_b').value;
+  const n=document.getElementById('ai_n').value, c=document.getElementById('ai_c').value;
+  const q=+document.getElementById('ai_q').value, l=document.getElementById('ai_l').value;
+  if(!s||!n){ toast('必須項目を入力してください','error'); return; }
+  const result = await sb.insert('inventory', {sku:s, barcode:b||null, name:n, client:c, qty:q, location:l||null, status:'正常'});
+  if(result){ closeModal('addItemModal'); toast('商品登録: '+n); renderInv(); }
+  else { toast('登録に失敗しました','error'); }
+}
+
+async function submitAddClient() {
+  const n = document.getElementById('cl_n').value;
+  if(!n){ toast('会社名を入力','error'); return; }
+  const colors=['#0066ff','#00e5a0','#ff6b35','#ffd32a','#9b59b6'];
+  const result = await sb.insert('clients', {name:n, contact:document.getElementById('cl_c').value, phone:document.getElementById('cl_p').value, email:document.getElementById('cl_e').value, area:document.getElementById('cl_a').value, color:colors[Math.floor(Math.random()*colors.length)]});
+  if(result){ closeModal('addClientModal'); toast('クライアント登録: '+n); renderClients(); }
+  else { toast('登録に失敗しました','error'); }
+}
+
+// ── SCAN ──
+let curScan = null;
+function simulateScan(){
+  const codes=['4901234500001','4901234500002','4901234500003'];
+  const bc=codes[Math.floor(Math.random()*codes.length)];
+  document.getElementById('manualBC').value=bc; lookupBC(bc);
+  const b=document.getElementById('scanBox'); b.classList.add('active'); setTimeout(()=>b.classList.remove('active'),500);
+}
+async function lookupBC(code) {
+  if(!code||code.length<5) return;
+  const d = document.getElementById('scanResult');
+  // DBから検索
+  const items = await sb.get('inventory', `&barcode=eq.${code}&limit=1`);
+  if(items&&items.length) {
+    curScan={bc:code, name:items[0].name, sku:items[0].sku, id:items[0].id, qty:items[0].qty};
+    d.textContent=code; d.style.color='var(--accent)'; toast(items[0].name+' を検出');
+  } else {
+    curScan={bc:code,name:'未登録',sku:'—'};
+    d.textContent=code+' (未登録)'; d.style.color='var(--yellow)';
+  }
+}
+async function processScan(){
+  if(!curScan){ toast('バーコードをスキャンしてください','error'); return; }
+  const qty=+document.getElementById('scanQty').value||1;
+  const now=new Date(), t=[now.getHours(),now.getMinutes(),now.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  D.scanN++;
+  const tb=document.getElementById('scanTbody'), row=document.createElement('tr');
+  row.innerHTML=`<td style="font-family:var(--mono);color:var(--text2)">${t}</td><td class="hm" style="font-family:var(--mono);font-size:10px">${curScan.bc}</td><td>${curScan.name}</td><td style="font-family:var(--mono)">${qty}</td>`;
+  row.style.animation='slideUp .2s ease'; tb.prepend(row);
+  document.getElementById('scanCount').textContent='本日: '+D.scanN+'件';
+  document.getElementById('scanQty').value=1;
+  toast('スキャン完了: '+curScan.name+' × '+qty);
+}
+
+// ── MODAL ──
+function openModal(id){
+  const today=new Date().toISOString().slice(0,10);
+  if(id==='inboundModal') document.getElementById('ib_d').value=today;
+  if(id==='outboundModal'){
+    document.getElementById('ob_dt').value=today;
+    document.getElementById('ob_s').innerHTML=D.inv.map(i=>`<option value="${i.sku}">${i.sku} - ${i.name}</option>`).join('');
+  }
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+// ── TOAST ──
+function toast(msg,type='success'){
+  const w=document.getElementById('toastWrap'), t=document.createElement('div');
+  t.className='toast '+type;
+  t.innerHTML=`<span style="font-size:15px">${type==='success'?'✓':'✕'}</span><span>${msg}</span>`;
+  w.appendChild(t); setTimeout(()=>t.remove(),3500);
+}
+
+// ── UTILS ──
+function handleSearch(v){ if(v.length>2){ goPage('inventory'); renderInv(v); } }
+function filterInv(v){ renderInv(v||document.getElementById('invSearch')?.value||''); }
+function switchTab(el){ el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active'); }
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
+
+// ── INIT ──
+renderDash();
+renderLoc();
+</script>
+</body>
+</html>
