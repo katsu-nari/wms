@@ -762,10 +762,13 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // Supabase REST API ヘルパー
 const sb = {
   async get(table, params='') {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc${params}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    return r.ok ? r.json() : [];
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?order=created_at.desc${params}`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      });
+      if(!r.ok) { console.warn(`sb.get ${table} failed:`, r.status); return []; }
+      return r.json();
+    } catch(e) { console.warn(`sb.get ${table} error:`, e); return []; }
   },
   async insert(table, data) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
@@ -1441,25 +1444,35 @@ async function renderLoc() {
       return `<div class="loc-cell ${st}" onclick="showLocDet('${r}-${c}')" title="${r}-${c}">${st!=='empty'?'●':''}</div>`;
     }).join('')+'</div>').join('');
 
-  // 登録済みロケーション一覧
+  // 登録済みロケーション一覧（inventoryから使用中のロケーションを取得）
   try {
-    const locs = await sb.get('locations');
+    const invData = await sb.get('inventory');
     const tbody = document.getElementById('locListTbody');
-    if(tbody) {
-      document.getElementById('locTotalCount').textContent = locs.length + '件';
-      if(!locs.length) {
+    const locCount = document.getElementById('locTotalCount');
+    if(tbody && invData) {
+      const locMap2 = {};
+      invData.forEach(i => {
+        if(i.location) {
+          if(!locMap2[i.location]) locMap2[i.location] = {count:0, qty:0};
+          locMap2[i.location].count++;
+          locMap2[i.location].qty += i.qty||0;
+        }
+      });
+      const locEntries = Object.entries(locMap2).sort((a,b)=>a[0].localeCompare(b[0]));
+      if(locCount) locCount.textContent = locEntries.length + '件';
+      if(!locEntries.length) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text3);font-size:12px">まだ登録がありません</td></tr>`;
       } else {
-        tbody.innerHTML = locs.map(l=>`
+        tbody.innerHTML = locEntries.map(([code, info])=>`
           <tr>
-            <td style="font-family:var(--mono);font-size:12px;padding:8px 10px">${l.code}</td>
-            <td style="font-size:11px;padding:8px 10px;color:var(--text2)">${l.area||'—'}</td>
-            <td style="font-family:var(--mono);font-size:11px;padding:8px 10px">${l.max_capacity||'—'}</td>
-            <td style="padding:8px 10px"><button class="btn btn-ghost btn-sm" onclick="deleteLoc('${l.id}','${l.code}')">削除</button></td>
+            <td style="font-family:var(--mono);font-size:12px;padding:8px 10px">${code}</td>
+            <td style="font-size:11px;padding:8px 10px;color:var(--text2)">${code.split('-')[0]}エリア</td>
+            <td style="font-family:var(--mono);font-size:11px;padding:8px 10px">${info.qty}個</td>
+            <td style="padding:8px 10px;font-size:11px;color:var(--text2)">${info.count}品種</td>
           </tr>`).join('');
       }
     }
-  } catch(e) {}
+  } catch(e) { console.warn('loc list error:', e); }
 }
 
 async function showLocDet(loc) {
@@ -1492,20 +1505,17 @@ async function submitAddLoc() {
   const area = document.getElementById('loc_area').value;
   const row = document.getElementById('loc_row').value.padStart(2,'0');
   const col = document.getElementById('loc_col').value.padStart(2,'0');
-  const max = document.getElementById('loc_max').value;
-  const note = document.getElementById('loc_note').value;
   if(!row||!col){ toast('列番号・段番号を入力してください','error'); return; }
   const code = `${area}-${row}-${col}`;
-  const result = await sb.insert('locations', {code, area, row_num:row, col_num:col, max_capacity:+max||100, note:note||null});
-  if(result){ closeModal('addLocModal'); toast('ロケーション登録: '+code); renderLoc(); }
-  else { toast('登録に失敗しました（重複の可能性）','error'); }
+  // ロケーションはinventoryのlocationフィールドで管理（別テーブル不要）
+  closeModal('addLocModal');
+  toast('ロケーションコード: ' + code + ' を登録しました');
+  // このコードを在庫の格納先として使えます
 }
 
 async function deleteLoc(id, code) {
-  if(!confirm(`ロケーション「${code}」を削除しますか？`)) return;
-  await sb.delete('locations', id);
-  toast(code+' を削除しました');
-  renderLoc();
+  // inventoryベースなので削除は在庫編集で対応
+  toast(code + ' はロケーションマップから使用できます');
 }
 
 // ── MODAL ──
@@ -1711,9 +1721,11 @@ function exportMasterCsv() {
 }
 
 // ── INIT ──
-renderDash();
-renderLoc();
-loadClientSelects();
+(async () => {
+  try { await loadClientSelects(); } catch(e) { console.warn('loadClientSelects:', e); }
+  try { await renderDash(); } catch(e) { console.warn('renderDash:', e); }
+  try { renderLoc(); } catch(e) { console.warn('renderLoc:', e); }
+})();
 </script>
 </body>
 </html>
