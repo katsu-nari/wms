@@ -303,10 +303,10 @@ tr:hover td{background:var(--surface2);}
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="kpi-grid">
-        <div class="kpi-card green"><div class="kpi-label">総在庫SKU</div><div class="kpi-value">1,248</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend up">↑+23</span><span>今月</span></div></div>
-        <div class="kpi-card blue"><div class="kpi-label">本日入庫</div><div class="kpi-value">84</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend up">↑+12%</span><span>前日比</span></div></div>
-        <div class="kpi-card yellow"><div class="kpi-label">本日出庫</div><div class="kpi-value">126</div><div class="kpi-sub" style="display:flex;gap:6px;align-items:center;margin-top:2px;"><span class="kpi-trend down">↓-5%</span><span>前日比</span></div></div>
-        <div class="kpi-card red"><div class="kpi-label">使用率</div><div class="kpi-value">73%</div><div class="kpi-sub" style="margin-top:2px;">空き 270/1,000</div></div>
+        <div class="kpi-card green"><div class="kpi-label">総在庫SKU</div><div class="kpi-value" id="kpiSku">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiSkuSub">読み込み中...</div></div>
+        <div class="kpi-card blue"><div class="kpi-label">本日入庫数</div><div class="kpi-value" id="kpiIn">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiInSub">読み込み中...</div></div>
+        <div class="kpi-card yellow"><div class="kpi-label">本日出庫数</div><div class="kpi-value" id="kpiOut">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiOutSub">読み込み中...</div></div>
+        <div class="kpi-card red"><div class="kpi-label">使用ロケーション</div><div class="kpi-value" id="kpiLoc">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiLocSub">読み込み中...</div></div>
       </div>
       <div class="grid-3 mb-12">
         <div class="card">
@@ -320,11 +320,9 @@ tr:hover td{background:var(--surface2);}
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title">アラート</div><span class="badge badge-red">3件</span></div>
+          <div class="card-header"><div class="card-title">アラート</div><span class="badge badge-red" id="alertBadge">—</span></div>
           <div class="card-body" style="padding:10px;">
-            <div class="alert-item error"><div class="alert-dot" style="background:var(--red)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">在庫切れ警告</div><div class="text-sm">SKU-00124 / 残2個</div></div></div>
-            <div class="alert-item warn"><div class="alert-dot" style="background:var(--warn)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">期限切れ接近</div><div class="text-sm">LOT-2024-089 / 残7日</div></div></div>
-            <div class="alert-item info"><div class="alert-dot" style="background:var(--blue)"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">入荷予定</div><div class="text-sm">鈴木商事 / 明日10:00</div></div></div>
+            <div id="alertList"><div style="text-align:center;padding:16px;color:var(--text2);font-size:12px">読み込み中...</div></div>
           </div>
         </div>
       </div>
@@ -686,39 +684,59 @@ function toggleMobSearch(){document.getElementById('mobSearch').classList.toggle
 
 // ── DASHBOARD ──
 async function renderDash() {
-  // トレンドチャート
-  const hin=[45,70,55,90,60,40,75], hout=[60,55,80,65,90,30,85], days=['月','火','水','木','金','土','今日'];
-  document.getElementById('trendChart').innerHTML = days.map((d,i)=>`
-    <div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;">
-      <div style="flex:1;display:flex;gap:1px;align-items:flex-end;width:100%;">
-        <div style="flex:1;background:${i===6?'var(--accent)':'rgba(0,229,160,.3)'};height:${hin[i]}%;border-radius:2px 2px 0 0;"></div>
-        <div style="flex:1;background:${i===6?'rgba(0,102,255,.7)':'rgba(0,102,255,.35)'};height:${hout[i]}%;border-radius:2px 2px 0 0;"></div>
-      </div>
-      <span style="font-family:var(--mono);font-size:8px;color:${i===6?'var(--accent)':'var(--text3)'};">${d}</span>
-    </div>`).join('');
-
-  // 最近の操作（inbound + outbound 合わせて最新5件）
-  showLoading('recentTbody');
-  const [ibData, obData] = await Promise.all([
-    sb.get('inbound', '&limit=3'),
-    sb.get('outbound', '&limit=3')
+  const today = new Date().toISOString().slice(0,10);
+  const [invData, ibData, obData] = await Promise.all([
+    sb.get('inventory'),
+    sb.get('inbound'),
+    sb.get('outbound')
   ]);
-  const recent = [
-    ...ibData.map(r=>({type:'入庫',name:r.name,client:r.client,qty:r.planned,loc:r.location,t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status})),
-    ...obData.map(r=>({type:'出庫',name:r.name,client:r.client,qty:r.qty,loc:'—',t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status}))
-  ].sort((a,b)=>b.t.localeCompare(a.t)).slice(0,5);
+  const ibToday = ibData.filter(r=>(r.date||r.created_at||'').slice(0,10)===today);
+  const obToday = obData.filter(r=>(r.date||r.created_at||'').slice(0,10)===today);
 
-  if(!recent.length){ showEmpty('recentTbody','まだ操作履歴がありません'); return; }
-  document.getElementById('recentTbody').innerHTML = recent.map(r=>`
-    <tr>
-      <td><span class="badge ${r.type==='入庫'?'badge-green':'badge-blue'}">${r.type}</span></td>
-      <td>${r.name}</td>
-      <td class="hm" style="font-size:11px">${r.client}</td>
-      <td style="font-family:var(--mono)">${r.qty}</td>
-      <td class="hm" style="font-family:var(--mono)">${r.loc}</td>
-      <td style="font-family:var(--mono);color:var(--text2)">${r.t}</td>
-      <td><span class="badge ${r.st==='完了'||r.st==='出荷済み'?'badge-green':'badge-yellow'}">${r.st}</span></td>
-    </tr>`).join('');
+  // KPI更新
+  document.getElementById('kpiSku').textContent = invData.length.toLocaleString();
+  document.getElementById('kpiSkuSub').textContent = '総数量: '+invData.reduce((s,i)=>s+i.qty,0).toLocaleString()+'個';
+  document.getElementById('kpiIn').textContent = ibToday.reduce((s,i)=>s+(i.actual||i.planned||0),0).toLocaleString();
+  document.getElementById('kpiInSub').textContent = '件数: '+ibToday.length+'件';
+  document.getElementById('kpiOut').textContent = obToday.reduce((s,i)=>s+i.qty,0).toLocaleString();
+  document.getElementById('kpiOutSub').textContent = '件数: '+obToday.length+'件';
+  const usedLocs = new Set(invData.filter(i=>i.qty>0).map(i=>i.location)).size;
+  document.getElementById('kpiLoc').textContent = usedLocs;
+  document.getElementById('kpiLocSub').textContent = '使用ロケーション';
+
+  // アラート
+  const alerts = [
+    ...invData.filter(i=>i.qty<=5&&i.qty>0).map(i=>({t:'error',title:'在庫残少',msg:i.name+' / 残'+i.qty+'個'})),
+    ...invData.filter(i=>i.expiry&&i.expiry!=='—'&&new Date(i.expiry)<new Date(Date.now()+7*864e5)).map(i=>({t:'warn',title:'期限切れ接近',msg:i.name+' / '+i.expiry})),
+    ...ibData.filter(i=>i.status==='受付待ち').map(i=>({t:'info',title:'入庫受付待ち',msg:i.name}))
+  ].slice(0,5);
+  document.getElementById('alertBadge').textContent = alerts.length+'件';
+  document.getElementById('alertList').innerHTML = alerts.length
+    ? alerts.map(a=>`<div class="alert-item ${a.t}"><div class="alert-dot" style="background:${a.t==='error'?'var(--red)':a.t==='warn'?'var(--warn)':'var(--blue)'}"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">${a.title}</div><div class="text-sm">${a.msg}</div></div></div>`).join('')
+    : '<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">アラートなし ✓</div>';
+
+  // 週次トレンド（実データ）
+  const days7 = Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d.toISOString().slice(0,10);});
+  const ibByDay={},obByDay={};
+  ibData.forEach(r=>{const d=(r.date||r.created_at||'').slice(0,10);ibByDay[d]=(ibByDay[d]||0)+(r.planned||0);});
+  obData.forEach(r=>{const d=(r.date||r.created_at||'').slice(0,10);obByDay[d]=(obByDay[d]||0)+r.qty;});
+  const maxV=Math.max(...days7.map(d=>Math.max(ibByDay[d]||0,obByDay[d]||0)),1);
+  const dn=['日','月','火','水','木','金','土'];
+  document.getElementById('trendChart').innerHTML = days7.map((d,i)=>{
+    const hi=Math.max(Math.round(((ibByDay[d]||0)/maxV)*100),3);
+    const ho=Math.max(Math.round(((obByDay[d]||0)/maxV)*100),3);
+    const isT=i===6;
+    return `<div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;"><div style="flex:1;display:flex;gap:1px;align-items:flex-end;width:100%;"><div style="flex:1;background:${isT?'var(--accent)':'rgba(0,229,160,.3)'};height:${hi}%;border-radius:2px 2px 0 0;"></div><div style="flex:1;background:${isT?'rgba(0,102,255,.8)':'rgba(0,102,255,.35)'};height:${ho}%;border-radius:2px 2px 0 0;"></div></div><span style="font-family:var(--mono);font-size:8px;color:${isT?'var(--accent)':'var(--text3)'};">${isT?'今日':dn[new Date(d).getDay()]}</span></div>`;
+  }).join('');
+
+  // 最近の履歴
+  showLoading('recentTbody');
+  const recent=[
+    ...ibData.slice(0,4).map(r=>({type:'入庫',name:r.name,client:r.client,qty:r.planned,loc:r.location||'—',t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status})),
+    ...obData.slice(0,4).map(r=>({type:'出庫',name:r.name,client:r.client,qty:r.qty,loc:'—',t:new Date(r.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),st:r.status}))
+  ].sort((a,b)=>b.t.localeCompare(a.t)).slice(0,6);
+  if(!recent.length){showEmpty('recentTbody','まだ操作履歴がありません。入出庫を登録してください。');return;}
+  document.getElementById('recentTbody').innerHTML=recent.map(r=>`<tr><td><span class="badge ${r.type==='入庫'?'badge-green':'badge-blue'}">${r.type}</span></td><td>${r.name}</td><td class="hm" style="font-size:11px">${r.client}</td><td style="font-family:var(--mono)">${r.qty}</td><td class="hm" style="font-family:var(--mono)">${r.loc}</td><td style="font-family:var(--mono);color:var(--text2)">${r.t}</td><td><span class="badge ${r.st==='完了'||r.st==='出荷済み'?'badge-green':'badge-yellow'}">${r.st}</span></td></tr>`).join('');
 }
 
 // ── CLIENTS ──
@@ -938,58 +956,55 @@ async function startCamera() {
 }
 
 function startZxingDecode(video) {
-  // ZXingライブラリを動的ロード
-  if(window.ZXing) { doZxingDecode(video); return; }
+  // QuaggaJS - JANコード対応が強力
+  if(window.Quagga) { doQuaggaDecode(); return; }
   const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
-  s.onload = () => doZxingDecode(video);
-  s.onerror = () => { document.getElementById('cameraStatus').textContent = 'スキャナー読み込みエラー。手動入力を使用してください。'; };
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+  s.onload = () => doQuaggaDecode();
+  s.onerror = () => {
+    document.getElementById('cameraStatus').textContent = 'ライブラリ読み込みエラー。手動入力を使用してください。';
+  };
   document.head.appendChild(s);
 }
 
-function doZxingDecode(video) {
-  try {
-    const hints = new Map();
-    const formats = [
-      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF,
-      ZXing.BarcodeFormat.DATA_MATRIX
-    ];
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-    const reader = new ZXing.MultiFormatReader();
-    reader.setHints(hints);
+function doQuaggaDecode() {
+  const statusEl = document.getElementById('cameraStatus');
+  statusEl.textContent = 'スキャナー起動中...';
+  // 既存videoを非表示にしてQuaggaのvideoを使う
+  const video = document.getElementById('cameraVideo');
+  video.style.display = 'none';
 
-    const canvas = document.getElementById('cameraCanvas');
-    const ctx = canvas.getContext('2d');
-    let lastCode = '';
+  Quagga.init({
+    inputStream: {
+      name: 'Live',
+      type: 'LiveStream',
+      target: document.querySelector('#cameraOverlay > div:nth-child(2)'),
+      constraints: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
+    },
+    decoder: {
+      readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','qr_reader','upc_reader']
+    },
+    locate: true
+  }, err => {
+    if(err) { statusEl.textContent = 'カメラ起動エラー: '+err.message; return; }
+    Quagga.start();
+    statusEl.textContent = 'バーコードを枠内に合わせてください (JAN/QR対応)';
+  });
 
-    scanInterval = setInterval(() => {
-      if(video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      try {
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const luminance = new ZXing.RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
-        const binary = new ZXing.HybridBinarizer(luminance);
-        const result = reader.decode(new ZXing.BinaryBitmap(binary));
-        if(result && result.text !== lastCode) {
-          lastCode = result.text;
-          stopCamera();
-          document.getElementById('manualBC').value = result.text;
-          lookupBC(result.text);
-          // バイブレーション
-          if(navigator.vibrate) navigator.vibrate(100);
-        }
-      } catch(e) {
-        // スキャン中は継続（エラー無視）
-      }
-    }, 200);
-  } catch(e) {
-    document.getElementById('cameraStatus').textContent = 'スキャナー初期化エラー';
-  }
+  let lastCode = '';
+  Quagga.onDetected(result => {
+    const code = result.codeResult.code;
+    if(code === lastCode) return;
+    lastCode = code;
+    Quagga.stop();
+    stopCamera();
+    document.getElementById('manualBC').value = code;
+    lookupBC(code);
+    if(navigator.vibrate) navigator.vibrate([100,50,100]);
+  });
 }
+
+function doZxingDecode(video) { /* 未使用 */ }
 
 function stopCamera() {
   if(scanInterval) { clearInterval(scanInterval); scanInterval = null; }
