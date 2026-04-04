@@ -303,7 +303,7 @@ tr:hover td{background:var(--surface2);}
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="kpi-grid">
-        <div class="kpi-card green"><div class="kpi-label">総在庫SKU</div><div class="kpi-value" id="kpiSku">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiSkuSub">読み込み中...</div></div>
+        <div class="kpi-card green"><div class="kpi-label">総在庫数</div><div class="kpi-value" id="kpiSku">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiSkuSub">読み込み中...</div></div>
         <div class="kpi-card blue"><div class="kpi-label">本日入庫数</div><div class="kpi-value" id="kpiIn">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiInSub">読み込み中...</div></div>
         <div class="kpi-card yellow"><div class="kpi-label">本日出庫数</div><div class="kpi-value" id="kpiOut">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiOutSub">読み込み中...</div></div>
         <div class="kpi-card red"><div class="kpi-label">使用ロケーション</div><div class="kpi-value" id="kpiLoc">—</div><div class="kpi-sub" style="margin-top:2px;" id="kpiLocSub">読み込み中...</div></div>
@@ -534,7 +534,7 @@ tr:hover td{background:var(--surface2);}
         <div class="form-group"><div class="form-label">商品名 *</div><input class="form-input" id="ib_n" placeholder="商品名"></div>
         <div class="form-row"><div class="form-group"><div class="form-label">バーコード</div><input class="form-input" id="ib_b" placeholder="4901234567890"></div><div class="form-group"><div class="form-label">予定数量 *</div><input class="form-input" type="number" id="ib_q" placeholder="0"></div></div>
         <div class="form-row"><div class="form-group"><div class="form-label">格納先 *</div><input class="form-input" id="ib_l" placeholder="A-01-01"></div><div class="form-group"><div class="form-label">ロット番号</div><input class="form-input" id="ib_lot" placeholder="LOT-2025-001"></div></div>
-        <div class="form-row"><div class="form-group"><div class="form-label">入荷日 *</div><input class="form-input" type="date" id="ib_d"></div><div class="form-group"><div class="form-label">賞味期限</div><input class="form-input" type="date" id="ib_e"></div></div>
+        <div class="form-row"><div class="form-group"><div class="form-label">入荷日 *</div><input class="form-input" type="date" id="ib_d" onchange="document.getElementById('ib_lot').value=this.value.replace(/-/g,'')"></div><div class="form-group"><div class="form-label">賞味期限</div><input class="form-input" type="date" id="ib_e"></div></div>
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('inboundModal')">キャンセル</button><button class="btn btn-primary" onclick="submitInbound()">登録</button></div>
@@ -694,8 +694,9 @@ async function renderDash() {
   const obToday = obData.filter(r=>(r.date||r.created_at||'').slice(0,10)===today);
 
   // KPI更新
-  document.getElementById('kpiSku').textContent = invData.length.toLocaleString();
-  document.getElementById('kpiSkuSub').textContent = '総数量: '+invData.reduce((s,i)=>s+i.qty,0).toLocaleString()+'個';
+  const totalQty = invData.reduce((s,i)=>s+(i.qty||0),0);
+  document.getElementById('kpiSku').textContent = totalQty.toLocaleString();
+  document.getElementById('kpiSkuSub').textContent = '品種数: '+invData.length+'種';
   document.getElementById('kpiIn').textContent = ibToday.reduce((s,i)=>s+(i.actual||i.planned||0),0).toLocaleString();
   document.getElementById('kpiInSub').textContent = '件数: '+ibToday.length+'件';
   document.getElementById('kpiOut').textContent = obToday.reduce((s,i)=>s+i.qty,0).toLocaleString();
@@ -860,8 +861,31 @@ async function showLocDet(loc) {
 
 // ── ACTIONS ──
 async function complIB(id) {
-  await sb.update('inbound', id, {status:'完了', actual: D.ib.find(x=>x.id===id)?.planned||0});
-  toast('受入完了');
+  const ibItem = D.ib.find(x=>x.id===id);
+  if(!ibItem) return;
+  const qty = ibItem.planned || 0;
+  // 入庫ステータス更新
+  await sb.update('inbound', id, {status:'完了', actual: qty});
+  // 在庫テーブルを更新（SKUで検索して加算）
+  const invItems = await sb.get('inventory', `&sku=eq.${encodeURIComponent(ibItem.sku)}&limit=1`);
+  if(invItems && invItems.length) {
+    // 既存商品に加算
+    const newQty = (invItems[0].qty||0) + qty;
+    await sb.update('inventory', invItems[0].id, {qty: newQty, location: ibItem.location||invItems[0].location});
+    toast(`受入完了 — 在庫: ${invItems[0].qty} → ${newQty}個`);
+  } else {
+    // 新規商品として登録
+    await sb.insert('inventory', {
+      sku: ibItem.sku,
+      name: ibItem.name,
+      client: ibItem.client,
+      qty: qty,
+      location: ibItem.location || 'N-8888-888',
+      lot: ibItem.date ? ibItem.date.replace(/-/g,'') : new Date().toISOString().slice(0,10).replace(/-/g,''),
+      status: '正常'
+    });
+    toast(`受入完了 — 新規在庫登録 ${qty}個`);
+  }
   renderIB();
 }
 async function complOB(id) {
@@ -878,13 +902,29 @@ async function deleteItem(id, name) {
 
 async function submitInbound() {
   const [c,s,n,q,l,lot,d,e,b] = ['ib_c','ib_s','ib_n','ib_q','ib_l','ib_lot','ib_d','ib_e','ib_b'].map(id=>document.getElementById(id).value);
-  if(!n||!s||!q||!l){ toast('必須項目を入力してください','error'); return; }
+  if(!n||!s||!q){ toast('必須項目を入力してください','error'); return; }
+  const inDate = d || new Date().toISOString().slice(0,10);
+  const autoLot = inDate.replace(/-/g,''); // yyyymmdd
+  const autoLoc = l || 'N-8888-888';
   const orderId = 'IN-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
-  const result = await sb.insert('inbound', {order_id:orderId, client:c, name:n, sku:s, planned:+q, actual:0, location:l, date:d||new Date().toISOString().slice(0,10), status:'受付待ち'});
+  const result = await sb.insert('inbound', {
+    order_id: orderId, client:c, name:n, sku:s,
+    planned:+q, actual:0,
+    location: autoLoc,
+    date: inDate,
+    lot: lot || autoLot,
+    status:'受付待ち'
+  });
   if(result) {
-    if(b) await sb.insert('inventory', {sku:s, barcode:b, name:n, client:c, qty:0, location:l, lot:lot||null, expiry:e||null, status:'正常'});
+    // バーコードがあれば在庫マスタに仮登録（qty=0）
+    if(b) {
+      const existing = await sb.get('inventory', `&sku=eq.${encodeURIComponent(s)}&limit=1`);
+      if(!existing||!existing.length) {
+        await sb.insert('inventory', {sku:s, barcode:b, name:n, client:c, qty:0, location:autoLoc, lot:lot||autoLot, expiry:e||null, status:'正常'});
+      }
+    }
     closeModal('inboundModal');
-    toast('入庫登録: '+orderId);
+    toast('入庫登録完了: '+orderId);
     renderIB();
   } else { toast('登録に失敗しました','error'); }
 }
@@ -1149,7 +1189,12 @@ async function deleteLoc(id, code) {
 // ── MODAL ──
 function openModal(id){
   const today=new Date().toISOString().slice(0,10);
-  if(id==='inboundModal') document.getElementById('ib_d').value=today;
+  const todayCompact=today.replace(/-/g,''); // yyyymmdd
+  if(id==='inboundModal'){
+    document.getElementById('ib_d').value=today;
+    document.getElementById('ib_lot').value=todayCompact; // ロット=入庫日
+    document.getElementById('ib_l').value='N-8888-888';   // 格納先デフォルト
+  }
   if(id==='outboundModal'){
     document.getElementById('ob_dt').value=today;
     document.getElementById('ob_s').innerHTML=D.inv.map(i=>`<option value="${i.sku}">${i.sku} - ${i.name}</option>`).join('');
