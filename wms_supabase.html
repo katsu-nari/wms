@@ -63,7 +63,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .drawer.open{left:0;}
 
 /* ── BOTTOM NAV (mobile) ── */
-.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:var(--bottomnav-h);background:var(--surface);border-top:1px solid var(--border);z-index:100;grid-template-columns:repeat(7,1fr);align-items:stretch;}
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:var(--bottomnav-h);background:var(--surface);border-top:1px solid var(--border);z-index:100;grid-template-columns:repeat(8,1fr);align-items:stretch;}
 .bnav{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--text3);transition:color .15s;position:relative;padding:4px 2px;}
 .bnav.active{color:var(--accent);}
 .bnav svg{width:19px;height:19px;}
@@ -254,6 +254,7 @@ tr:hover td{background:var(--surface2);}
   <div class="nav-section">
     <div class="nav-label">在庫</div>
     <div class="nav-item" onclick="goPage('inventory',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>在庫一覧</div>
+    <div class="nav-item" onclick="goPage('master',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="goPage('location',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
   </div>
   <div class="sidebar-footer">
@@ -277,6 +278,7 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" onclick="goPage('scan');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/></svg>スキャン</div>
     <div style="height:1px;background:var(--border);margin:6px 2px;"></div>
     <div class="nav-item" onclick="goPage('inventory');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>在庫一覧</div>
+    <div class="nav-item" onclick="goPage('master');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="goPage('location');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
   </div>
   <div class="sidebar-footer"><div class="user-pill"><div class="avatar">田</div><div><div class="user-name">田中 太郎</div><div class="user-role">倉庫管理者</div></div></div></div>
@@ -487,6 +489,72 @@ tr:hover td{background:var(--surface2);}
       </div>
     </div>
 
+    <!-- MASTER -->
+    <div class="page" id="page-master">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <div class="search-bar" style="max-width:none;flex:1;min-width:160px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="JANコード・商品名・メーカーで検索..." id="masterSearch" oninput="filterMaster(this.value)">
+        </div>
+        <select class="form-select" style="width:150px;flex-shrink:0;" id="masterClientFilt" onchange="filterMaster()">
+          <option value="">全クライアント</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModal('addItemModal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>商品登録
+        </button>
+      </div>
+
+      <!-- 集計バー -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;" id="masterStats">
+        <div class="card" style="padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2);margin-bottom:4px;">登録商品数</div>
+          <div style="font-family:var(--disp);font-size:22px;font-weight:800;" id="masterTotalItems">—</div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2);margin-bottom:4px;">在庫あり</div>
+          <div style="font-family:var(--disp);font-size:22px;font-weight:800;color:var(--green);" id="masterInStock">—</div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2);margin-bottom:4px;">在庫なし</div>
+          <div style="font-family:var(--disp);font-size:22px;font-weight:800;color:var(--red);" id="masterOutStock">—</div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text2);margin-bottom:4px;">残少アラート</div>
+          <div style="font-family:var(--disp);font-size:22px;font-weight:800;color:var(--yellow);" id="masterLowStock">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">商品マスタ一覧</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="text-sm" id="masterCount">—件</span>
+            <button class="btn btn-ghost btn-sm" onclick="exportMasterCsv()">CSV出力</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>JANコード</th>
+                <th>商品名</th>
+                <th class="hm">メーカー</th>
+                <th class="hm">クライアント</th>
+                <th style="text-align:right;">原単価</th>
+                <th style="text-align:right;">売単価</th>
+                <th style="text-align:right;">入数</th>
+                <th style="text-align:right;">在庫数</th>
+                <th class="hm">ロケーション</th>
+                <th>状態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="masterTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 
   <!-- BOTTOM NAV -->
@@ -515,6 +583,10 @@ tr:hover td{background:var(--surface2);}
     <div class="bnav" id="bn-inventory" onclick="goPage('inventory')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
       <span class="bnav-lbl">在庫</span>
+    </div>
+    <div class="bnav" id="bn-master" onclick="goPage('master')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+      <span class="bnav-lbl">マスタ</span>
     </div>
     <div class="bnav" id="bn-location" onclick="goPage('location')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -733,7 +805,7 @@ function showEmpty(tbodyId, msg='データがありません') {
 }
 
 // ── ナビゲーション ──
-const titles={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',location:'ロケーション管理'};
+const titles={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',location:'ロケーション管理',master:'商品マスタ管理'};
 function goPage(p,el){
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
@@ -742,7 +814,7 @@ function goPage(p,el){
   if(el) el.classList.add('active');
   document.querySelectorAll('.bnav').forEach(x=>x.classList.remove('active'));
   const bn=document.getElementById('bn-'+p); if(bn) bn.classList.add('active');
-  const renders={dashboard:renderDash,clients:renderClients,inbound:renderIB,outbound:renderOB,inventory:()=>renderInv(),location:renderLoc};
+  const renders={dashboard:renderDash,clients:renderClients,inbound:renderIB,outbound:renderOB,inventory:()=>renderInv(),location:renderLoc,master:()=>renderMaster()};
   if(renders[p]) renders[p]();
 }
 function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('dBg').classList.add('open');}
@@ -1204,18 +1276,30 @@ async function submitAddItem() {
   const l=document.getElementById('ai_l')?.value||'N-8888-888';
   const minStock=+document.getElementById('ai_m')?.value||10;
   if(!b||!n){ toast('JANコードと商品名は必須です','error'); return; }
-  // SKUはJANコードと同じにする
-  const result = await sb.insert('inventory', {
-    sku: b, barcode: b, name: n, client: c, maker,
-    qty: 0, location: l,
-    unit_per_case: unit,
-    cost_price: cost,
-    sell_price: sell,
-    min_stock: minStock,
-    status:'正常'
-  });
-  if(result){ closeModal('addItemModal'); toast('商品マスタ登録: '+n); renderInv(); }
-  else { toast('登録に失敗しました（JANコード重複の可能性）','error'); }
+
+  const modal = document.getElementById('addItemModal');
+  const editId = modal.dataset.editId;
+  const payload = { sku:b, barcode:b, name:n, client:c, maker, location:l, unit_per_case:unit, cost_price:cost, sell_price:sell, min_stock:minStock, status:'正常' };
+
+  if(editId) {
+    // 編集モード
+    const result = await sb.update('inventory', editId, payload);
+    if(result) {
+      modal.dataset.editId = '';
+      modal.querySelector('.modal-title').textContent = '商品マスタ登録';
+      closeModal('addItemModal');
+      toast('商品マスタを更新しました: '+n);
+      renderMaster();
+    } else { toast('更新に失敗しました','error'); }
+  } else {
+    // 新規登録
+    const result = await sb.insert('inventory', {...payload, qty:0});
+    if(result) {
+      closeModal('addItemModal');
+      toast('商品マスタ登録: '+n);
+      renderMaster();
+    } else { toast('登録に失敗しました（JANコード重複の可能性）','error'); }
+  }
 }
 
 async function submitAddClient() {
@@ -1472,7 +1556,14 @@ function openModal(id){
   if(id==='addLocModal') updateLocPreview();
   document.getElementById(id).classList.add('open');
 }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function closeModal(id){
+  const modal = document.getElementById(id);
+  modal.classList.remove('open');
+  if(id==='addItemModal'){
+    modal.dataset.editId='';
+    modal.querySelector('.modal-title').textContent='商品マスタ登録';
+  }
+}
 
 // ── TOAST ──
 function toast(msg,type='success'){
@@ -1500,6 +1591,145 @@ async function loadClientSelects() {
     const el=document.getElementById(id);
     if(el) el.innerHTML='<option value="">全クライアント</option>'+names.map(n=>`<option>${n}</option>`).join('');
   });
+}
+
+// ── MASTER (商品マスタ) ──
+let masterData = [];
+
+async function renderMaster(filter='') {
+  const tbody = document.getElementById('masterTbody');
+  if(!tbody) return;
+
+  // データ取得
+  masterData = await sb.get('inventory');
+
+  // クライアントフィルタ選択肢を更新
+  const cf = document.getElementById('masterClientFilt');
+  if(cf) {
+    const clients = [...new Set(masterData.map(i=>i.client).filter(Boolean))];
+    cf.innerHTML = '<option value="">全クライアント</option>' +
+      clients.map(c=>`<option>${c}</option>`).join('');
+  }
+
+  // フィルタ適用
+  const clientF = document.getElementById('masterClientFilt')?.value || '';
+  let data = masterData;
+  if(filter) {
+    const q = filter.toLowerCase();
+    data = data.filter(i =>
+      (i.barcode||'').includes(q) ||
+      (i.name||'').toLowerCase().includes(q) ||
+      (i.maker||'').toLowerCase().includes(q) ||
+      (i.sku||'').includes(q)
+    );
+  }
+  if(clientF) data = data.filter(i=>i.client===clientF);
+
+  // 集計
+  const total = masterData.length;
+  const inStock = masterData.filter(i=>i.qty>0).length;
+  const outStock = masterData.filter(i=>i.qty<=0).length;
+  const lowStock = masterData.filter(i=>i.qty>0&&i.qty<=(i.min_stock||10)).length;
+  document.getElementById('masterTotalItems').textContent = total;
+  document.getElementById('masterInStock').textContent = inStock;
+  document.getElementById('masterOutStock').textContent = outStock;
+  document.getElementById('masterLowStock').textContent = lowStock;
+  document.getElementById('masterCount').textContent = data.length + '件';
+
+  if(!data.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">
+      <div style="font-size:28px;margin-bottom:8px">📋</div>
+      <div>${filter||clientF?'検索結果がありません':'商品マスタが空です。商品を登録してください。'}</div>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map(i => {
+    const statusBadge = i.qty<=0
+      ? '<span class="badge badge-red">在庫なし</span>'
+      : i.qty<=(i.min_stock||10)
+        ? '<span class="badge badge-yellow">残少</span>'
+        : '<span class="badge badge-green">正常</span>';
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:11px;">${i.barcode||i.sku||'—'}</td>
+      <td style="font-weight:500;">${i.name||'—'}</td>
+      <td class="hm" style="font-size:11px;color:var(--text2);">${i.maker||'—'}</td>
+      <td class="hm" style="font-size:11px;">${i.client||'—'}</td>
+      <td style="font-family:var(--mono);text-align:right;">¥${(i.cost_price||0).toLocaleString()}</td>
+      <td style="font-family:var(--mono);text-align:right;">¥${(i.sell_price||0).toLocaleString()}</td>
+      <td style="font-family:var(--mono);text-align:right;">${i.unit_per_case||1}</td>
+      <td style="font-family:var(--mono);text-align:right;font-weight:700;color:${i.qty<=0?'var(--red)':i.qty<=(i.min_stock||10)?'var(--yellow)':'var(--text)'};">${(i.qty||0).toLocaleString()}</td>
+      <td class="hm" style="font-family:var(--mono);font-size:11px;">${i.location||'—'}</td>
+      <td>${statusBadge}</td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-ghost btn-sm" onclick="openEditMaster('${i.id}')">編集</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteMasterItem('${i.id}','${(i.name||'').replace(/'/g,"\'")}')">削除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterMaster(v) {
+  renderMaster(v || document.getElementById('masterSearch')?.value || '');
+}
+
+async function deleteMasterItem(id, name) {
+  if(!confirm(`「${name}」を商品マスタから削除しますか？
+※在庫データも削除されます`)) return;
+  await sb.delete('inventory', id);
+  toast(`${name} を削除しました`);
+  renderMaster();
+}
+
+// 編集モーダル
+function openEditMaster(id) {
+  const item = masterData.find(i=>i.id===id);
+  if(!item) return;
+  // addItemModalを編集モードで開く
+  document.getElementById('ai_b').value = item.barcode||item.sku||'';
+  document.getElementById('ai_n').value = item.name||'';
+  document.getElementById('ai_maker').value = item.maker||'';
+  document.getElementById('ai_unit').value = item.unit_per_case||1;
+  document.getElementById('ai_cost').value = item.cost_price||0;
+  document.getElementById('ai_sell').value = item.sell_price||0;
+  document.getElementById('ai_l').value = item.location||'N-8888-888';
+  document.getElementById('ai_m').value = item.min_stock||10;
+  // クライアント選択
+  const csel = document.getElementById('ai_c');
+  if(csel) Array.from(csel.options).forEach(o=>{ if(o.value===item.client) o.selected=true; });
+  // 編集IDを保持
+  document.getElementById('addItemModal').dataset.editId = id;
+  document.getElementById('addItemModal').querySelector('.modal-title').textContent = '商品マスタ編集';
+  document.getElementById('addItemModal').classList.add('open');
+}
+
+// CSV出力
+function exportMasterCsv() {
+  const data = masterData;
+  if(!data.length) { toast('データがありません','error'); return; }
+  const headers = ['JANコード','商品名','メーカー','クライアント','原単価','売単価','入数','在庫数','ロケーション','状態'];
+  const rows = data.map(i=>[
+    i.barcode||i.sku||'',
+    i.name||'',
+    i.maker||'',
+    i.client||'',
+    i.cost_price||0,
+    i.sell_price||0,
+    i.unit_per_case||1,
+    i.qty||0,
+    i.location||'',
+    i.status||'正常'
+  ]);
+  const csv = [headers, ...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('
+');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `商品マスタ_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('CSVを出力しました');
 }
 
 // ── INIT ──
