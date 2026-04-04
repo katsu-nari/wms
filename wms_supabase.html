@@ -928,31 +928,57 @@ async function showLocDet(loc) {
 
 // ── ACTIONS ──
 async function complIB(id) {
-  const ibItem = D.ib.find(x=>x.id===id);
-  if(!ibItem) return;
-  const qty = ibItem.planned || 0;
-  // 入庫ステータス更新
-  await sb.update('inbound', id, {status:'完了', actual: qty});
-  // 在庫テーブルを更新（SKUで検索して加算）
-  const invItems = await sb.get('inventory', `&sku=eq.${encodeURIComponent(ibItem.sku)}&limit=1`);
-  if(invItems && invItems.length) {
-    // 既存商品に加算
-    const newQty = (invItems[0].qty||0) + qty;
-    await sb.update('inventory', invItems[0].id, {qty: newQty, location: ibItem.location||invItems[0].location});
-    toast(`受入完了 — 在庫: ${invItems[0].qty} → ${newQty}個`);
+  // DBから最新データを取得
+  const ibItems = await sb.get('inbound', `&id=eq.${id}&limit=1`);
+  if(!ibItems || !ibItems.length) { toast('データが見つかりません','error'); return; }
+  const ib = ibItems[0];
+  const qty = ib.planned || 0;
+  const barcode = ib.barcode || ib.sku || '';
+
+  // ① 入庫ステータスを完了に更新
+  await sb.update('inbound', id, { status:'完了', actual: qty });
+
+  // ② 在庫テーブルをバーコードで検索
+  let invItems = [];
+  if(barcode) {
+    invItems = await sb.get('inventory', `&barcode=eq.${encodeURIComponent(barcode)}&limit=1`);
+  }
+  // バーコードで見つからなければSKUで検索
+  if(!invItems.length && ib.sku) {
+    invItems = await sb.get('inventory', `&sku=eq.${encodeURIComponent(ib.sku)}&limit=1`);
+  }
+
+  if(invItems.length) {
+    // 既存在庫に加算
+    const prev = invItems[0].qty || 0;
+    const newQty = prev + qty;
+    await sb.update('inventory', invItems[0].id, {
+      qty: newQty,
+      location: ib.location || invItems[0].location || 'N-8888-888',
+      lot: ib.lot || invItems[0].lot
+    });
+    toast(`✅ 受入完了 — ${ib.name} 在庫: ${prev} → ${newQty}個`);
   } else {
-    // 新規商品として登録
+    // 新規商品として在庫登録
     await sb.insert('inventory', {
-      sku: ibItem.sku,
-      name: ibItem.name,
-      client: ibItem.client,
+      sku: barcode || ib.sku || '',
+      barcode: barcode,
+      name: ib.name,
+      client: ib.client,
+      maker: ib.maker || '',
       qty: qty,
-      location: ibItem.location || 'N-8888-888',
-      lot: ibItem.date ? ibItem.date.replace(/-/g,'') : new Date().toISOString().slice(0,10).replace(/-/g,''),
+      location: ib.location || 'N-8888-888',
+      lot: ib.lot || (ib.date||'').replace(/-/g,''),
+      cost_price: ib.cost_price || 0,
+      sell_price: ib.sell_price || 0,
+      unit_per_case: ib.unit_per_case || 1,
       status: '正常'
     });
-    toast(`受入完了 — 新規在庫登録 ${qty}個`);
+    toast(`✅ 受入完了 — ${ib.name} 新規登録 ${qty}個`);
   }
+
+  // ③ 画面を更新
+  D.ib = D.ib.map(x => x.id===id ? {...x, status:'完了', actual:qty} : x);
   renderIB();
 }
 async function complOB(id) {
@@ -987,13 +1013,13 @@ function buildIbLines() {
         <input class="form-input" id="ib_name_${i}" placeholder="商品名" style="min-width:120px;font-size:12px;padding:6px 8px;" readonly>
       </td>
       <td style="padding:4px 5px;">
-        <input class="form-input" id="ib_cost_${i}" placeholder="0" type="number" style="width:80px;font-size:12px;padding:6px 8px;text-align:right;" readonly>
+        <input class="form-input" id="ib_cost_${i}" placeholder="0" type="number" style="width:80px;font-size:12px;padding:6px 8px;text-align:right;" oninput="calcIbPiece(${i})">
       </td>
       <td style="padding:4px 5px;">
-        <input class="form-input" id="ib_sell_${i}" placeholder="0" type="number" style="width:80px;font-size:12px;padding:6px 8px;text-align:right;" readonly>
+        <input class="form-input" id="ib_sell_${i}" placeholder="0" type="number" style="width:80px;font-size:12px;padding:6px 8px;text-align:right;">
       </td>
       <td style="padding:4px 5px;">
-        <input class="form-input" id="ib_unit_${i}" placeholder="0" type="number" style="width:60px;font-size:12px;padding:6px 8px;text-align:right;" readonly>
+        <input class="form-input" id="ib_unit_${i}" placeholder="1" type="number" min="1" style="width:60px;font-size:12px;padding:6px 8px;text-align:right;" oninput="calcIbPiece(${i})">
       </td>
       <td style="padding:4px 5px;">
         <input class="form-input" id="ib_cs_${i}" placeholder="0" type="number" min="0" style="width:70px;font-size:12px;padding:6px 8px;text-align:right;"
@@ -1034,11 +1060,17 @@ async function onIbJanInput(idx, jan) {
 }
 
 function fillIbRow(idx, m) {
-  const set = (id, val) => { const el=document.getElementById(id); if(el) el.value=val||''; };
+  const set = (id, val) => {
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.value = val||'';
+    el.readOnly = false;
+    el.style.color = 'var(--accent)';
+  };
   set(`ib_name_${idx}`, m.name||'');
   set(`ib_cost_${idx}`, m.cost_price||'');
   set(`ib_sell_${idx}`, m.sell_price||'');
-  set(`ib_unit_${idx}`, m.unit_per_case||'');
+  set(`ib_unit_${idx}`, m.unit_per_case||1);
   calcIbPiece(idx);
 }
 
@@ -1210,75 +1242,73 @@ function setScanMode(mode, el) {
 async function startCamera() {
   const overlay = document.getElementById('cameraOverlay');
   overlay.style.display = 'flex';
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
-    });
-    const video = document.getElementById('cameraVideo');
-    video.srcObject = cameraStream;
-    await video.play();
-    // ZXing ライブラリでデコード
-    startZxingDecode(video);
-  } catch(e) {
-    document.getElementById('cameraStatus').textContent = 'カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。';
-    console.error(e);
+  document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+
+  // html5-qrcode ライブラリをロード（JANコード対応が最も安定）
+  if(!window.Html5Qrcode) {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload = () => initHtml5Qrcode();
+    s.onerror = () => {
+      document.getElementById('cameraStatus').textContent = 'ライブラリ読み込み失敗。手動入力を使用してください。';
+    };
+    document.head.appendChild(s);
+  } else {
+    initHtml5Qrcode();
   }
 }
 
-function startZxingDecode(video) {
-  // QuaggaJS - JANコード対応が強力
-  if(window.Quagga) { doQuaggaDecode(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
-  s.onload = () => doQuaggaDecode();
-  s.onerror = () => {
-    document.getElementById('cameraStatus').textContent = 'ライブラリ読み込みエラー。手動入力を使用してください。';
-  };
-  document.head.appendChild(s);
-}
+let html5QrScanner = null;
 
-function doQuaggaDecode() {
+function initHtml5Qrcode() {
   const statusEl = document.getElementById('cameraStatus');
-  statusEl.textContent = 'スキャナー起動中...';
-  // 既存videoを非表示にしてQuaggaのvideoを使う
-  const video = document.getElementById('cameraVideo');
-  video.style.display = 'none';
+  const videoEl = document.getElementById('cameraVideo');
+  videoEl.style.display = 'none';
 
-  Quagga.init({
-    inputStream: {
-      name: 'Live',
-      type: 'LiveStream',
-      target: document.querySelector('#cameraOverlay > div:nth-child(2)'),
-      constraints: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
-    },
-    decoder: {
-      readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','qr_reader','upc_reader']
-    },
-    locate: true
-  }, err => {
-    if(err) { statusEl.textContent = 'カメラ起動エラー: '+err.message; return; }
-    Quagga.start();
-    statusEl.textContent = 'バーコードを枠内に合わせてください (JAN/QR対応)';
-  });
+  // スキャン先コンテナを準備
+  let scanDiv = document.getElementById('html5qr-container');
+  if(!scanDiv) {
+    scanDiv = document.createElement('div');
+    scanDiv.id = 'html5qr-container';
+    scanDiv.style.cssText = 'width:100%;flex:1;';
+    videoEl.parentNode.insertBefore(scanDiv, videoEl);
+  }
+  scanDiv.innerHTML = '';
 
-  let lastCode = '';
-  Quagga.onDetected(result => {
-    const code = result.codeResult.code;
-    if(code === lastCode) return;
-    lastCode = code;
-    Quagga.stop();
-    stopCamera();
-    document.getElementById('manualBC').value = code;
-    lookupBC(code);
-    if(navigator.vibrate) navigator.vibrate([100,50,100]);
+  html5QrScanner = new Html5Qrcode('html5qr-container');
+  html5QrScanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.7 },
+    (code) => {
+      // 読み取り成功
+      html5QrScanner.stop().then(() => {
+        stopCamera();
+        document.getElementById('manualBC').value = code;
+        lookupBC(code);
+        if(navigator.vibrate) navigator.vibrate([100,50,100]);
+      }).catch(()=>{});
+    },
+    () => {} // エラーは無視（スキャン中は常に発生）
+  ).then(() => {
+    statusEl.textContent = 'バーコードを枠内に合わせてください（JAN/QR対応）';
+  }).catch(err => {
+    statusEl.textContent = 'カメラ起動失敗: ' + err;
   });
 }
 
-function doZxingDecode(video) { /* 未使用 */ }
+// スキャンはinitHtml5Qrcodeで処理
 
 function stopCamera() {
   if(scanInterval) { clearInterval(scanInterval); scanInterval = null; }
   if(cameraStream) { cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+  if(html5QrScanner) {
+    try { html5QrScanner.stop().catch(()=>{}); } catch(e){}
+    html5QrScanner = null;
+  }
+  const cont = document.getElementById('html5qr-container');
+  if(cont) cont.innerHTML = '';
+  const video = document.getElementById('cameraVideo');
+  if(video) video.style.display = '';
   document.getElementById('cameraOverlay').style.display = 'none';
 }
 
