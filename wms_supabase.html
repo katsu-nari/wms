@@ -971,32 +971,10 @@ async function renderInv(f='') {
 }
 
 // ── LOCATION ──
-function renderLoc() {
-  const rows=['A','B','C','D','E','F','G','H'], cols=Array.from({length:10},(_,i)=>String(i+1).padStart(2,'0'));
-  const sts=['empty','empty','low','low','mid','mid','full','low','empty','mid'];
-  const map = document.getElementById('locMap');
-  map.innerHTML = '<div class="loc-row"><div class="loc-label"></div>'+cols.map(c=>`<div class="loc-label" style="text-align:center;font-size:8px">${c}</div>`).join('')+'</div>' +
-    rows.map(r=>'<div class="loc-row"><div class="loc-label">'+r+'</div>'+cols.map((c,i)=>{
-      const st=sts[(i+r.charCodeAt(0))%sts.length];
-      return `<div class="loc-cell ${st}" onclick="showLocDet('${r}-${c}')" title="${r}-${c}">${st!=='empty'?'●':''}</div>`;
-    }).join('')+'</div>').join('');
-}
-async function showLocDet(loc) {
-  const d = document.getElementById('locDetail');
-  d.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text2);font-size:12px">読み込み中...</div>`;
-  const items = await sb.get('inventory', `&location=like.${loc[0]}*`);
-  if(!items.length){
-    d.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3)"><div style="font-size:24px;margin-bottom:6px">📭</div><div style="font-family:var(--mono);color:var(--accent)">${loc}</div><div style="margin-top:4px">空きロケーション</div></div>`;
-    return;
-  }
-  d.innerHTML = `<div style="font-family:var(--mono);color:var(--accent);margin-bottom:10px;">📦 ${loc}</div>` +
-    items.slice(0,3).map(i=>`
-      <div style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:6px;">
-        <div style="font-weight:600;font-size:12px;margin-bottom:2px;">${i.name}</div>
-        <div style="font-size:10px;color:var(--text2);">${i.client} · ${i.sku}</div>
-        <div style="font-family:var(--mono);color:var(--accent);margin-top:4px;">在庫: ${i.qty}</div>
-      </div>`).join('');
-}
+
+
+// showLocDet → 下部の版を使用
+
 
 // ── ACTIONS ──
 async function complIB(id) {
