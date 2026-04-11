@@ -152,6 +152,10 @@ tr:hover td{background:var(--surface2);}
 .sbar{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;flex:1;}
 .sbar input{background:none;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:12px;flex:1;min-width:0;}
 .sbar svg{width:13px;height:13px;color:var(--text3);flex-shrink:0;}
+.sb-nav{flex:1;overflow-y:auto;}
+.sb-nav::-webkit-scrollbar{width:2px;}
+.sb-nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+@media print{.no-print{display:none!important;}.print-only{display:block!important;}body{background:#fff;color:#000;}.modal-hd button,.modal-ft{display:none!important;}.modal{max-height:none!important;overflow:visible!important;}}
 @media(max-width:768px){
   .sidebar{display:none;}
   .bottom-nav{display:flex!important;}
@@ -174,6 +178,7 @@ tr:hover td{background:var(--surface2);}
 <div class="app">
 <nav class="sidebar">
   <div class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div><div><div class="logo-text">LogiCore</div><div class="logo-sub">WMS v3.0</div></div></div>
+  <div class="sb-nav">
   <div class="nav-sec">
     <div class="nav-lbl">メイン</div>
     <div class="nav-item active" onclick="go('dashboard',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>ダッシュボード</div>
@@ -191,6 +196,21 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" onclick="go('master',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="go('location',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
   </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">作業</div>
+    <div class="nav-item" onclick="go('stocktaking',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>棚卸管理</div>
+    <div class="nav-item" onclick="go('picking',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>ピッキング</div>
+    <div class="nav-item" onclick="go('returns',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>返品処理</div>
+  </div>
+  <div class="nav-sec">
+    <div class="nav-lbl">分析・管理</div>
+    <div class="nav-item" onclick="go('history',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>入出庫履歴</div>
+    <div class="nav-item" onclick="go('orders',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>発注管理</div>
+    <div class="nav-item" onclick="go('reports',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>レポート</div>
+    <div class="nav-item" onclick="go('users',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>ユーザー管理</div>
+    <div class="nav-item" onclick="go('schema',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>DBスキーマ</div>
+  </div>
+  </div>
   <div class="sb-foot"><div class="user-pill"><div class="avatar">田</div><div><div style="font-size:12px;font-weight:500;">田中 太郎</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">倉庫管理者</div></div></div></div>
 </nav>
 <div class="drawer-bg" id="dBg" onclick="closeDrawer()"></div>
@@ -207,6 +227,16 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" onclick="go('inventory');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>在庫一覧</div>
     <div class="nav-item" onclick="go('master');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="go('location');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
+    <hr style="border-color:var(--border);margin:5px 0;">
+    <div class="nav-item" onclick="go('stocktaking');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>棚卸管理</div>
+    <div class="nav-item" onclick="go('picking');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>ピッキング</div>
+    <div class="nav-item" onclick="go('returns');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/></svg>返品処理</div>
+    <hr style="border-color:var(--border);margin:5px 0;">
+    <div class="nav-item" onclick="go('history');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>入出庫履歴</div>
+    <div class="nav-item" onclick="go('orders');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>発注管理</div>
+    <div class="nav-item" onclick="go('reports');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>レポート</div>
+    <div class="nav-item" onclick="go('users');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>ユーザー管理</div>
+    <div class="nav-item" onclick="go('schema');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>DBスキーマ</div>
   </div>
   <div class="sb-foot"><div class="user-pill"><div class="avatar">田</div><div><div style="font-size:12px;font-weight:500;">田中 太郎</div></div></div></div>
 </nav>
@@ -370,6 +400,104 @@ tr:hover td{background:var(--surface2);}
       </div>
     </div>
 
+    <!-- STOCKTAKING -->
+    <div class="page" id="page-stocktaking">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:9px;">
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <select class="fs" style="width:140px;" id="stClientF" onchange="renderStocktaking()"><option value="">全クライアント</option></select>
+          <button class="btn btn-g btn-sm" onclick="renderStocktaking()">更新</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:11px;color:var(--text2);" id="stDiff">—</span>
+          <button class="btn btn-p" onclick="applyStocktaking()">差異を在庫に適用</button>
+        </div>
+      </div>
+      <div class="card"><div class="card-hd"><div class="card-title">棚卸入力</div><span style="font-size:11px;color:var(--text2);">実在庫数を入力して差異を確認</span></div>
+        <div class="tw"><table><thead><tr><th>JANコード</th><th>商品名</th><th class="hm">クライアント</th><th class="hm">ロケーション</th><th style="text-align:right;">帳簿在庫</th><th style="text-align:right;">実在庫入力</th><th style="text-align:right;">差異</th></tr></thead><tbody id="stTb"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- PICKING -->
+    <div class="page" id="page-picking">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">ピッキング指示</div><span style="font-size:11px;color:var(--text2);" id="pickCnt">0件</span></div>
+        <div class="tw"><table><thead><tr><th>出庫ID</th><th>商品名</th><th class="hm">クライアント</th><th>数量</th><th class="hm">ロケーション</th><th class="hm">出荷先</th><th>優先度</th><th>操作</th></tr></thead><tbody id="pickTb"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- RETURNS -->
+    <div class="page" id="page-returns">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:13px;">
+        <button class="btn btn-p" onclick="openModal('returnModal')">+ 返品登録</button>
+      </div>
+      <div class="card"><div class="tw"><table><thead><tr><th>返品ID</th><th>商品名</th><th class="hm">クライアント</th><th>数量</th><th class="hm">返品理由</th><th class="hm">日付</th><th>状態</th><th>操作</th></tr></thead><tbody id="returnTb"></tbody></table></div></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="page" id="page-history">
+      <div style="display:flex;gap:7px;margin-bottom:13px;flex-wrap:wrap;align-items:center;">
+        <input class="fi" type="date" id="histFrom" style="width:130px;flex-shrink:0;" onchange="renderHistory()">
+        <span style="color:var(--text3);font-size:11px;">〜</span>
+        <input class="fi" type="date" id="histTo" style="width:130px;flex-shrink:0;" onchange="renderHistory()">
+        <div class="sbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="商品名・クライアント..." id="histSearch" oninput="renderHistory()"></div>
+        <button class="btn btn-g btn-sm" onclick="exportHistCsv()">CSV出力</button>
+      </div>
+      <div class="card"><div class="card-hd"><div class="card-title">入出庫ログ</div><span style="font-size:11px;color:var(--text2);" id="histCnt">—件</span></div>
+        <div class="tw"><table><thead><tr><th>日時</th><th>種別</th><th>伝票No</th><th>商品名</th><th class="hm">クライアント</th><th style="text-align:right;">数量</th><th class="hm">状態</th></tr></thead><tbody id="histTb"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="page" id="page-orders">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:9px;">
+        <select class="fs" style="width:140px;" id="ordStatusF" onchange="renderOrders()"><option value="">全ステータス</option><option>発注中</option><option>入庫済み</option><option>キャンセル</option></select>
+        <div style="display:flex;gap:7px;">
+          <button class="btn btn-g" onclick="autoSuggestOrders()">不足品目を自動提案</button>
+          <button class="btn btn-p" onclick="openModal('orderModal')">+ 発注登録</button>
+        </div>
+      </div>
+      <div class="card mb12" id="orderSuggest" style="display:none;"><div class="card-hd"><div class="card-title" style="color:var(--yellow);">⚠ 発注提案</div><button class="btn btn-g btn-sm" onclick="document.getElementById('orderSuggest').style.display='none'">閉じる</button></div><div class="card-body" id="orderSuggestBody"></div></div>
+      <div class="card"><div class="tw"><table><thead><tr><th>発注ID</th><th>商品名</th><th class="hm">クライアント</th><th class="hm">仕入先</th><th style="text-align:right;">発注数</th><th class="hm">発注日</th><th class="hm">納期</th><th>状態</th><th>操作</th></tr></thead><tbody id="orderTb"></tbody></table></div></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;flex-wrap:wrap;">
+        <input class="fi" type="month" id="repMonth" style="width:140px;flex-shrink:0;" onchange="renderReports()">
+        <button class="btn btn-g btn-sm" onclick="exportRepCsv()">CSV出力</button>
+      </div>
+      <div class="kpi-grid" id="repKpis" style="margin-bottom:14px;"></div>
+      <div class="g2 mb12">
+        <div class="card"><div class="card-hd"><div class="card-title">月次入出庫推移</div></div>
+          <div class="card-body">
+            <div style="display:flex;gap:12px;margin-bottom:9px;"><div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:var(--accent);border-radius:2px;"></div>入庫</div><div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:rgba(0,102,255,.6);border-radius:2px;"></div>出庫</div></div>
+            <div style="display:flex;gap:1px;align-items:flex-end;height:80px;" id="repChart"></div>
+          </div>
+        </div>
+        <div class="card"><div class="card-hd"><div class="card-title">在庫評価額</div></div><div class="card-body" id="repValue"></div></div>
+      </div>
+      <div class="card"><div class="card-hd"><div class="card-title">クライアント別サマリ</div></div>
+        <div class="tw"><table><thead><tr><th>クライアント</th><th style="text-align:right;">月次入庫</th><th style="text-align:right;">月次出庫</th><th style="text-align:right;">現在庫</th><th style="text-align:right;">在庫評価額</th></tr></thead><tbody id="repClientTb"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="page" id="page-users">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:13px;">
+        <button class="btn btn-p" onclick="openModal('userModal')">+ ユーザー追加</button>
+      </div>
+      <div class="card"><div class="tw"><table><thead><tr><th>名前</th><th>メール</th><th>ロール</th><th class="hm">所属倉庫</th><th>操作</th></tr></thead><tbody id="userTb"></tbody></table></div></div>
+    </div>
+
+    <!-- SCHEMA -->
+    <div class="page" id="page-schema">
+      <div style="display:flex;gap:7px;margin-bottom:13px;">
+        <button class="btn btn-p" onclick="copySchema()">クリップボードにコピー</button>
+        <span style="font-size:11px;color:var(--text2);align-self:center;">Supabase の SQL Editor に貼り付けて実行してください</span>
+      </div>
+      <div class="card"><div class="card-body"><pre id="schemaText" style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:pre-wrap;line-height:1.7;overflow-x:auto;"></pre></div></div>
+    </div>
+
   </div>
   <nav class="bottom-nav" style="display:none;">
     <div class="bnav active" id="bn-dashboard" onclick="go('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="bnav-lbl">ホーム</span></div>
@@ -454,6 +582,53 @@ tr:hover td{background:var(--surface2);}
   </div>
 </div>
 
+<div class="modal-ov" id="pickModal">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-hd"><div class="modal-title">ピッキングリスト</div><button class="modal-x no-print" onclick="closeModal('pickModal')">×</button></div>
+    <div class="modal-body" id="pickModalBody"></div>
+    <div class="modal-ft no-print"><button class="btn btn-g" onclick="closeModal('pickModal')">閉じる</button><button class="btn btn-g" onclick="window.print()">印刷</button><button class="btn btn-p" onclick="doPick()">ピッキング完了</button></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="returnModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">返品登録</div><button class="modal-x" onclick="closeModal('returnModal')">×</button></div>
+    <div class="modal-body"><div class="fg">
+      <div class="fr"><div class="fl"><div class="flbl">クライアント *</div><select class="fs" id="ret_client" onchange="loadRetProducts()"></select></div><div class="fl"><div class="flbl">商品 *</div><select class="fs" id="ret_sku"></select></div></div>
+      <div class="fr"><div class="fl"><div class="flbl">返品数 *</div><input class="fi" type="number" id="ret_qty" min="1" placeholder="0"></div><div class="fl"><div class="flbl">返品日 *</div><input class="fi" type="date" id="ret_date"></div></div>
+      <div class="fl"><div class="flbl">返品理由 *</div><select class="fs" id="ret_reason"><option>品質不良</option><option>誤配送</option><option>過剰在庫</option><option>破損</option><option>その他</option></select></div>
+      <div class="fl"><div class="flbl">備考</div><input class="fi" id="ret_note" placeholder="詳細..."></div>
+    </div></div>
+    <div class="modal-ft"><button class="btn btn-g" onclick="closeModal('returnModal')">キャンセル</button><button class="btn btn-p" onclick="submitReturn()">登録</button></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="orderModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="orderModalTitle">発注登録</div><button class="modal-x" onclick="closeModal('orderModal')">×</button></div>
+    <div class="modal-body"><div class="fg">
+      <div class="fr"><div class="fl"><div class="flbl">クライアント *</div><select class="fs" id="ord_client" onchange="loadOrdProducts()"></select></div><div class="fl"><div class="flbl">商品 *</div><select class="fs" id="ord_sku"></select></div></div>
+      <div class="fr"><div class="fl"><div class="flbl">発注数 *</div><input class="fi" type="number" id="ord_qty" min="1" placeholder="0"></div><div class="fl"><div class="flbl">仕入先</div><input class="fi" id="ord_supplier" placeholder="仕入先会社名"></div></div>
+      <div class="fr"><div class="fl"><div class="flbl">発注日 *</div><input class="fi" type="date" id="ord_date"></div><div class="fl"><div class="flbl">納期予定</div><input class="fi" type="date" id="ord_due"></div></div>
+      <div class="fl"><div class="flbl">備考</div><input class="fi" id="ord_note" placeholder="備考..."></div>
+    </div></div>
+    <div class="modal-ft"><button class="btn btn-g" onclick="closeModal('orderModal')">キャンセル</button><button class="btn btn-p" onclick="submitOrder()">発注登録</button></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="userModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="userModalTitle">ユーザー追加</div><button class="modal-x" onclick="closeModal('userModal')">×</button></div>
+    <div class="modal-body"><div class="fg">
+      <div class="fl"><div class="flbl">名前 *</div><input class="fi" id="usr_name" placeholder="山田 太郎"></div>
+      <div class="fl"><div class="flbl">メール *</div><input class="fi" type="email" id="usr_email" placeholder="yamada@example.com"></div>
+      <div class="fl"><div class="flbl">ロール *</div><select class="fs" id="usr_role"><option>管理者</option><option>倉庫スタッフ</option><option>閲覧のみ</option></select></div>
+      <div class="fl"><div class="flbl">所属倉庫</div><input class="fi" id="usr_warehouse" placeholder="東京倉庫"></div>
+    </div></div>
+    <div class="modal-ft"><button class="btn btn-g" onclick="closeModal('userModal')">キャンセル</button><button class="btn btn-p" onclick="submitUser()">登録</button></div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
@@ -466,8 +641,8 @@ const sb={
   async update(t,id,d){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:{...H,Prefer:'return=representation'},body:JSON.stringify(d)});return r.ok?await r.json():null;}catch(e){return null;}},
   async del(t,id){try{await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});}catch(e){}}
 };
-const S={inv:[],ib:[],ob:[],clients:[],scanN:0,scanMode:'入庫',curScan:null,editId:null};
-const TITLES={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',master:'商品マスタ管理',location:'ロケーション管理'};
+const S={inv:[],ib:[],ob:[],clients:[],scanN:0,scanMode:'入庫',curScan:null,editId:null,_histRows:[],_repData:null};
+const TITLES={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',master:'商品マスタ管理',location:'ロケーション管理',stocktaking:'棚卸管理',picking:'ピッキング',returns:'返品処理',history:'入出庫履歴',orders:'発注管理',reports:'レポート',users:'ユーザー管理',schema:'DBスキーマ'};
 
 function go(page,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -478,7 +653,7 @@ function go(page,el){
   if(el)el.classList.add('active');
   document.querySelectorAll('.bnav').forEach(n=>n.classList.remove('active'));
   const bn=document.getElementById('bn-'+page);if(bn)bn.classList.add('active');
-  const map={dashboard:renderDash,clients:renderClients,inbound:renderIB,outbound:renderOB,inventory:renderInv,master:renderMaster,location:renderLoc};
+  const map={dashboard:renderDash,clients:renderClients,inbound:renderIB,outbound:renderOB,inventory:renderInv,master:renderMaster,location:renderLoc,stocktaking:renderStocktaking,picking:renderPicking,returns:renderReturns,history:renderHistory,orders:renderOrders,reports:renderReports,users:renderUsers,schema:renderSchema};
   if(map[page])map[page]();
 }
 function openDrawer(){document.getElementById('drawer').classList.add('open');document.getElementById('dBg').classList.add('open');}
@@ -714,11 +889,12 @@ async function submitOB(){
   const qty=+document.getElementById('ob_qty').value;
   const dest=document.getElementById('ob_dest').value;
   const date=document.getElementById('ob_date').value||new Date().toISOString().slice(0,10);
+  const priority=document.getElementById('ob_pri').value||'通常';
   if(!sku||!qty||!dest){toast('必須項目を入力してください','e');return;}
   const inv=S.inv.find(i=>i.barcode===sku||i.sku===sku);
   if(inv&&inv.qty<qty){toast('在庫不足（現在庫: '+inv.qty+'）','e');return;}
   const oid='OUT-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
-  const r=await sb.insert('outbound',{order_id:oid,client,name:inv?inv.name:sku,sku,qty,destination:dest,date,status:'ピッキング待ち'});
+  const r=await sb.insert('outbound',{order_id:oid,client,name:inv?inv.name:sku,sku,qty,destination:dest,date,priority,location:inv?inv.location:'',status:'ピッキング待ち'});
   if(r){closeModal('obModal');toast('出庫登録: '+oid);renderOB();}else{toast('登録に失敗しました','e');}
 }
 
@@ -803,7 +979,7 @@ async function openModal(id){
   const today=new Date().toISOString().slice(0,10);
   if(!S.clients.length)S.clients=await sb.get('clients');
   const cOpts=S.clients.map(c=>'<option>'+c.name+'</option>').join('');
-  ['ib_client','ob_client','m_client','scanClient'].forEach(sid=>{const el=document.getElementById(sid);if(el&&cOpts)el.innerHTML=cOpts;});
+  ['ib_client','ob_client','m_client','scanClient','ret_client','ord_client'].forEach(sid=>{const el=document.getElementById(sid);if(el&&cOpts)el.innerHTML=cOpts;});
   if(id==='ibModal'){
     document.getElementById('ib_date').value=today;
     document.getElementById('ib_lot').value=today.replace(/-/g,'');
@@ -821,9 +997,25 @@ async function openModal(id){
     ['m_cost','m_sell'].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='0';});
     document.getElementById('m_unit').value=1;document.getElementById('m_loc').value='N-8888-888';document.getElementById('m_min').value=10;
   }
+  if(id==='returnModal'){
+    document.getElementById('ret_date').value=today;
+    document.getElementById('ret_qty').value='';document.getElementById('ret_note').value='';
+    if(!S.inv.length)S.inv=await sb.get('inventory');
+    loadRetProducts();
+  }
+  if(id==='orderModal'){
+    document.getElementById('ord_date').value=today;
+    ['ord_qty','ord_supplier','ord_due','ord_note'].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
+    if(!S.inv.length)S.inv=await sb.get('inventory');
+    loadOrdProducts();
+  }
+  if(id==='userModal'&&!usrEditId){
+    document.getElementById('userModalTitle').textContent='ユーザー追加';
+    ['usr_name','usr_email','usr_warehouse'].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
+  }
   document.getElementById(id).classList.add('open');
 }
-function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='masterModal')S.editId=null;}
+function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='masterModal')S.editId=null;if(id==='userModal')usrEditId=null;}
 document.querySelectorAll('.modal-ov').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 function toast(msg,type){
