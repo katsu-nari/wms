@@ -28,7 +28,8 @@ products ──▶ inventory ────┘
 
 | # | 論理名 | 物理名 | 概要 |
 |---|--------|--------|------|
-| 1 | ユーザープロフィール | `profiles` | `auth.users` に紐づく拡張情報・ロール |
+| 1 | ユーザープロフィール | `profiles` | `auth.users` に紐づく社員番号・ロール・ロック状態 |
+| 1b | ログイン試行ログ | `login_attempts` | 社員番号ベースのレート制限・監査用 |
 | 2 | 商品マスタ | `products` | SKU 単位の商品情報 |
 | 3 | ロケーションマスタ | `locations` | 保管場所の階層情報 |
 | 4 | 在庫 | `inventory` | SKU × ロット × ロケーション単位の現在在庫 |
@@ -43,16 +44,48 @@ products ──▶ inventory ────┘
 ## 3. テーブル定義
 
 ### 3.1 `profiles`
+ログインは **社員番号 + 数字5桁パスワード** で行う。
+Supabase Auth 基盤を流用するため、内部的に擬似メール `{employee_number}@wms.internal`
+を `auth.users.email` に格納し、`profiles.employee_number` を正規のログインIDとする。
+
 ```sql
 create table profiles (
-  id           uuid primary key references auth.users on delete cascade,
-  email        text not null,
-  display_name text,
-  role         text not null check (role in ('admin','operator','viewer')),
-  created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now()
+  id              uuid primary key references auth.users on delete cascade,
+  employee_number text not null unique,         -- 例: E00123
+  display_name    text,
+  role            text not null check (role in ('admin','operator','viewer')),
+  is_locked       bool not null default false,  -- 強制ロック状態
+  locked_until    timestamptz,                  -- 一時ロック解除時刻
+  failed_count    int  not null default 0,      -- 現在の連続失敗回数
+  last_login_at   timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
 );
+create index on profiles (employee_number);
 ```
+
+### 3.1.1 `login_attempts`（ログイン試行ログ）
+ブルートフォース対策の根拠となる監査テーブル。5桁PINは総当たりで10万通りしか
+ないため、この表を使ったレート制限を**必須**とする。
+
+```sql
+create table login_attempts (
+  id               bigserial primary key,
+  employee_number  text not null,
+  success          bool not null,
+  ip_address       inet,
+  user_agent       text,
+  attempted_at     timestamptz not null default now()
+);
+create index on login_attempts (employee_number, attempted_at desc);
+```
+
+#### ロック判定ルール
+| 条件 | 結果 |
+|------|------|
+| 直近 15 分以内に同一社員番号で失敗 5 回 | `locked_until = now() + 15 min` |
+| 直近 24 時間以内に同一社員番号で失敗 20 回 | `is_locked = true`（admin 解除） |
+| 成功時 | `failed_count = 0`、`locked_until = null` |
 
 ### 3.2 `products`
 ```sql
@@ -257,6 +290,7 @@ create index on stocktake_items (location_id);
 | テーブル | admin | operator | viewer |
 |----------|:-----:|:--------:|:------:|
 | `profiles` | R/W（全件）| R（自分のみ）| R（自分のみ）|
+| `login_attempts` | R（全件）| Insert（自分の試行のみ）| Insert（自分の試行のみ）|
 | `products` | R/W | R | R |
 | `locations` | R/W | R | R |
 | `inventory` | R/W | R/W | R |
