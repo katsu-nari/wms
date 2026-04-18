@@ -6,7 +6,23 @@
 // ---------- Supabase Config ----------
 const SB_URL = 'https://fpobnehdqamuqlepfkrf.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwb2JuZWhkcWFtdXFsZXBma3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTEzMDIsImV4cCI6MjA5MDc4NzMwMn0._Io2LvqCrqe3ZTmQgNpInu_iNAaCqK8Hn-Xp5Ijsnd8';
-const sb = supabase.createClient(SB_URL, SB_KEY);
+const memStorage = {
+  _d: {},
+  getItem(k) { return this._d[k] || null; },
+  setItem(k, v) { this._d[k] = v; },
+  removeItem(k) { delete this._d[k]; },
+};
+
+let _storage = memStorage;
+try { window.sessionStorage.setItem('_t', '1'); window.sessionStorage.removeItem('_t'); _storage = window.sessionStorage; } catch(e) {}
+
+const sb = supabase.createClient(SB_URL, SB_KEY, {
+  auth: {
+    storage: _storage,
+    persistSession: true,
+    detectSessionInUrl: false,
+  }
+});
 
 // ---------- App State ----------
 const App = {
