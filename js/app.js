@@ -114,7 +114,8 @@ async function doLogin() {
     await loadProfile();
     showApp();
   } catch (e) {
-    showLoginErr('接続エラーが発生しました');
+    console.error('Login error:', e);
+    showLoginErr('接続エラー: ' + (e?.message || JSON.stringify(e)));
     btn.disabled = false; btn.textContent = 'ログイン';
   }
 }
