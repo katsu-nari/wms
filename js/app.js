@@ -101,7 +101,7 @@ async function doLogin() {
     const email = empNo.toLowerCase() + '@wms.internal';
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pin });
 
-    await sb.rpc('fn_record_login_attempt', { emp: empNo, ok: !error }).catch(() => {});
+    try { await sb.rpc('fn_record_login_attempt', { emp: empNo, ok: !error }); } catch(e) {}
 
     if (error) {
       showLoginErr('社員番号またはパスワードが違います');
