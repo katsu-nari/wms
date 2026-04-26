@@ -17,7 +17,7 @@ RENDER_FNS.products = async function renderProducts() {
       </div>
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>SKU</th><th>商品名</th><th class="hm">JAN</th><th>単位</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
+      <thead><tr><th>SKU</th><th>商品名</th><th class="hm">JAN</th><th>単位</th><th class="hm">原単価</th><th class="hm">売単価</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
       <tbody id="prodTb"></tbody>
     </table></div></div>
   `;
@@ -45,12 +45,14 @@ function filterProducts() {
         <td>${esc(p.name)}</td>
         <td class="hm" style="font-family:var(--mono);font-size:11px;">${esc(p.jan_code) || '—'}</td>
         <td>${esc(p.unit)}${p.pack_size > 1 ? ' ×' + p.pack_size : ''}</td>
+        <td class="hm" style="font-family:var(--mono);">${p.cost_price != null ? Number(p.cost_price).toLocaleString() : '—'}</td>
+        <td class="hm" style="font-family:var(--mono);">${p.sell_price != null ? Number(p.sell_price).toLocaleString() : '—'}</td>
         <td class="hm">${conditionLabel(p.storage_condition)}</td>
         <td class="hm" style="font-family:var(--mono);">${p.min_stock}</td>
         <td class="hm">${p.track_expiry ? '<span class="badge bg">有</span>' : '<span class="badge bgr">無</span>'}</td>
         ${isAdmin() ? `<td><button class="btn btn-g btn-sm" onclick="openProductModal('${p.id}')">編集</button></td>` : ''}
       </tr>`).join('')
-    : '<tr><td colspan="8" class="empty-state">商品が見つかりません</td></tr>';
+    : '<tr><td colspan="10" class="empty-state">商品が見つかりません</td></tr>';
 }
 
 function openProductModal(id) {
@@ -65,6 +67,10 @@ function openProductModal(id) {
     <div class="fr">
       <div class="fl"><div class="flbl">単位</div><input class="fi" id="pm_unit" value="${esc(p?.unit || '個')}"></div>
       <div class="fl"><div class="flbl">入数</div><input class="fi" id="pm_pack" type="number" min="1" value="${p?.pack_size || 1}"></div>
+    </div>
+    <div class="fr">
+      <div class="fl"><div class="flbl">原単価</div><input class="fi" id="pm_cost" type="number" min="0" step="0.01" value="${p?.cost_price ?? ''}"></div>
+      <div class="fl"><div class="flbl">売単価</div><input class="fi" id="pm_sell" type="number" min="0" step="0.01" value="${p?.sell_price ?? ''}"></div>
     </div>
     <div class="fr">
       <div class="fl"><div class="flbl">保管条件</div><select class="fs" id="pm_cond">
@@ -97,6 +103,8 @@ async function saveProduct(id) {
     jan_code: document.getElementById('pm_jan').value.trim() || null,
     unit: document.getElementById('pm_unit').value.trim() || '個',
     pack_size: parseInt(document.getElementById('pm_pack').value) || 1,
+    cost_price: document.getElementById('pm_cost').value !== '' ? parseFloat(document.getElementById('pm_cost').value) : null,
+    sell_price: document.getElementById('pm_sell').value !== '' ? parseFloat(document.getElementById('pm_sell').value) : null,
     storage_condition: document.getElementById('pm_cond').value,
     min_stock: parseInt(document.getElementById('pm_min').value) || 0,
     track_expiry: document.getElementById('pm_expiry').checked,
@@ -127,8 +135,8 @@ async function deleteProduct(id) {
 }
 
 function exportProductsCSV() {
-  const header = ['SKU', '商品名', 'JANコード', '単位', '入数', '保管条件', '最低在庫', '期限管理'];
-  const rows = _products.map(p => [p.sku, p.name, p.jan_code, p.unit, p.pack_size, conditionLabel(p.storage_condition), p.min_stock, p.track_expiry ? '有' : '無']);
+  const header = ['SKU', '商品名', 'JANコード', '単位', '入数', '原単価', '売単価', '保管条件', '最低在庫', '期限管理'];
+  const rows = _products.map(p => [p.sku, p.name, p.jan_code, p.unit, p.pack_size, p.cost_price ?? '', p.sell_price ?? '', conditionLabel(p.storage_condition), p.min_stock, p.track_expiry ? '有' : '無']);
   downloadCSV('wms_products_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);
   toast('商品マスタCSVをダウンロードしました');
 }

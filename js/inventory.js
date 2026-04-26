@@ -44,7 +44,11 @@ let _inventory = [];
 
 async function loadInventory() {
   const { data } = await sb.from('v_inventory_with_names').select('*').order('sku');
-  _inventory = data || [];
+  const today = new Date().toISOString().slice(0, 10);
+  // 在庫0で前日以前に更新された行は非表示
+  _inventory = (data || []).filter(i =>
+    i.qty > 0 || (i.updated_at && i.updated_at.slice(0, 10) >= today)
+  );
 
   // zone filter
   const zones = [...new Set(_inventory.map(i => i.zone))].sort();

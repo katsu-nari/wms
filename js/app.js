@@ -41,6 +41,7 @@ const PAGE_TITLES = {
   stocktake: '棚卸',
   products: '商品マスタ',
   locations: 'ロケーション管理',
+  suppliers: '仕入先マスタ',
   reports: 'レポート / CSV',
   users: 'ユーザー管理',
 };
@@ -228,8 +229,9 @@ function closeDrawer() {
 }
 
 // ---------- Modal ----------
-function openModal(title, bodyHtml, footerHtml) {
+function openModal(title, bodyHtml, footerHtml, wide) {
   const m = document.getElementById('modalContent');
+  m.classList.toggle('wide', !!wide);
   m.innerHTML = `
     <div class="modal-hd">
       <div class="modal-title">${title}</div>
