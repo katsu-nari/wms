@@ -20,7 +20,7 @@ RENDER_FNS.dashboard = async function renderDashboard() {
         <div class="card-body">
           <div style="display:flex;gap:12px;margin-bottom:9px;">
             <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:var(--accent);border-radius:2px;"></div>入庫</div>
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:rgba(0,102,255,.6);border-radius:2px;"></div>出庫</div>
+            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);"><div style="width:8px;height:8px;background:rgba(44,95,158,.45);border-radius:2px;"></div>出庫</div>
           </div>
           <div style="display:flex;gap:3px;align-items:flex-end;height:65px;" id="trendChart"></div>
         </div>
@@ -101,8 +101,8 @@ RENDER_FNS.dashboard = async function renderDashboard() {
     const isT = i === 6;
     return `<div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;">
       <div style="flex:1;display:flex;gap:1px;align-items:flex-end;width:100%;">
-        <div style="flex:1;background:${isT ? 'var(--accent)' : 'rgba(0,229,160,.3)'};height:${hi}%;border-radius:2px 2px 0 0;"></div>
-        <div style="flex:1;background:${isT ? 'rgba(0,102,255,.8)' : 'rgba(0,102,255,.35)'};height:${ho}%;border-radius:2px 2px 0 0;"></div>
+        <div style="flex:1;background:${isT ? 'var(--accent)' : 'rgba(44,95,158,.25)'};height:${hi}%;border-radius:2px 2px 0 0;"></div>
+        <div style="flex:1;background:${isT ? 'rgba(44,95,158,.7)' : 'rgba(44,95,158,.12)'};height:${ho}%;border-radius:2px 2px 0 0;"></div>
       </div>
       <span style="font-family:var(--mono);font-size:8px;color:${isT ? 'var(--accent)' : 'var(--text3)'};">${isT ? '今日' : dn[new Date(d + 'T12:00:00').getDay()]}</span>
     </div>`;
