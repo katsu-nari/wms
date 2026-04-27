@@ -10,8 +10,9 @@ RENDER_FNS.inventory = async function renderInventory() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <div class="sbar" style="max-width:260px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input id="invSearch" placeholder="SKU / 商品名 / ロケーション..." oninput="filterInventory()">
+          <input id="invSearch" placeholder="SKU / 商品名 / JAN..." oninput="filterInventory()">
         </div>
+        <button class="btn-scan" onclick="invScan()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="13" y2="8"/><line x1="7" y1="16" x2="15" y2="16"/></svg>スキャン</button>
         <select class="fs" id="invZone" style="width:auto;min-width:80px;" onchange="filterInventory()">
           <option value="">全ゾーン</option>
         </select>
@@ -59,6 +60,13 @@ async function loadInventory() {
   filterInventory();
 }
 
+function invScan() {
+  startScan((code) => {
+    const el = document.getElementById('invSearch');
+    if (el) { el.value = code; filterInventory(); }
+  });
+}
+
 function filterInventory() {
   const q = (document.getElementById('invSearch')?.value || '').toLowerCase();
   const zone = document.getElementById('invZone')?.value || '';
@@ -69,7 +77,7 @@ function filterInventory() {
   const in30 = now + 30 * 864e5;
 
   let filtered = _inventory;
-  if (q) filtered = filtered.filter(i => (i.sku + i.product_name + i.location_code).toLowerCase().includes(q));
+  if (q) filtered = filtered.filter(i => (i.sku + i.product_name + (i.jan_code || '') + i.location_code).toLowerCase().includes(q));
   if (zone) filtered = filtered.filter(i => i.zone === zone);
   if (cond) filtered = filtered.filter(i => i.storage_condition === cond);
   if (lowOnly) filtered = filtered.filter(i => i.low_stock);

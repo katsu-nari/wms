@@ -25,6 +25,7 @@ RENDER_FNS.outbound = async function renderOutbound() {
 
 let _obOrders = [];
 let _obTabFilter = 'all';
+let _obProducts = [];
 
 function setObTab(tab, tabEl) {
   _obTabFilter = tab;
@@ -66,40 +67,79 @@ function renderObTable() {
     : '<tr><td colspan="7" class="empty-state">出庫データがありません</td></tr>';
 }
 
-function openOutboundModal() {
+async function openOutboundModal() {
+  const { data } = await sb.from('products').select('id, sku, name, jan_code').is('deleted_at', null).order('sku');
+  _obProducts = data || [];
+
+  let rowsHtml = '';
+  for (let i = 0; i < 10; i++) {
+    rowsHtml += `<tr id="obRow${i}">
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:4px 6px;">${i + 1}</td>
+      <td style="padding:4px 3px;"><div style="display:flex;gap:2px;align-items:center;"><input class="fi ob-jan" style="font-size:11px;padding:5px 6px;flex:1;" placeholder="JAN" data-row="${i}" onchange="obJanLookup(${i})"><button class="btn-scan" onclick="obScanRow(${i})" style="padding:3px 5px;font-size:0;" title="スキャン"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg></button></div></td>
+      <td style="padding:4px 3px;"><span id="obPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" id="obPid${i}"></td>
+      <td style="padding:4px 3px;"><input class="fi ob-qty" id="obQty${i}" style="font-size:11px;padding:5px 6px;width:70px;" type="number" min="1"></td>
+    </tr>`;
+  }
+
   const body = `<div class="fg">
     <div class="fr">
       <div class="fl"><div class="flbl">伝票番号</div><input class="fi" id="ob_slip" placeholder="自動採番（空可）"></div>
       <div class="fl"><div class="flbl">出荷先</div><input class="fi" id="ob_customer" placeholder="出荷先名"></div>
     </div>
-    <div class="fl"><div class="flbl">出荷予定日</div><input class="fi" id="ob_date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
-    <div class="fl"><div class="flbl">備考</div><input class="fi" id="ob_note" placeholder="メモ"></div>
+    <div class="fr">
+      <div class="fl"><div class="flbl">出荷予定日</div><input class="fi" id="ob_date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <div class="fl"><div class="flbl">備考</div><input class="fi" id="ob_note" placeholder="メモ"></div>
+    </div>
     <hr style="border-color:var(--border);">
-    <div class="flbl">明細行</div>
-    <div id="obItemRows"></div>
-    <button class="btn btn-g btn-sm" onclick="addObItemRow()" style="align-self:flex-start;">+ 行追加</button>
+    <div class="flbl">明細行（最大10行）</div>
+    <div class="tw"><table style="min-width:400px;">
+      <thead><tr>
+        <th style="width:30px;">#</th>
+        <th style="width:140px;">JANコード</th>
+        <th>商品名</th>
+        <th style="width:80px;">数量</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table></div>
   </div>`;
   const footer = `
     <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
     <button class="btn btn-p" onclick="saveOutbound()">登録</button>
   `;
-  openModal('出庫登録', body, footer);
-  _obRowIdx = 0;
-  addObItemRow();
+  openModal('出庫登録', body, footer, true);
 }
 
-let _obRowIdx = 0;
-function addObItemRow() {
-  const wrap = document.getElementById('obItemRows');
-  if (!wrap) return;
-  const idx = _obRowIdx++;
-  const div = document.createElement('div');
-  div.className = 'fr mb12';
-  div.innerHTML = `
-    <div class="fl"><div class="flbl">商品SKU</div><input class="fi ob-sku" placeholder="P-00001"></div>
-    <div class="fl"><div class="flbl">予定数量</div><input class="fi ob-qty" type="number" min="1" value="1"></div>
-  `;
-  wrap.appendChild(div);
+function obJanLookup(row) {
+  const janInput = document.querySelector(`#obRow${row} .ob-jan`);
+  const jan = (janInput?.value || '').trim();
+  const pnameEl = document.getElementById('obPname' + row);
+  const pidEl = document.getElementById('obPid' + row);
+
+  if (!jan) {
+    pnameEl.textContent = '—';
+    pidEl.value = '';
+    return;
+  }
+  const prod = _obProducts.find(p => p.jan_code === jan);
+  if (prod) {
+    pnameEl.textContent = prod.name;
+    pnameEl.style.color = 'var(--text)';
+    pidEl.value = prod.id;
+  } else {
+    pnameEl.textContent = '該当なし';
+    pnameEl.style.color = 'var(--red)';
+    pidEl.value = '';
+  }
+}
+
+function obScanRow(row) {
+  startScan((code) => {
+    const janInput = document.querySelector(`#obRow${row} .ob-jan`);
+    if (janInput) {
+      janInput.value = code;
+      obJanLookup(row);
+    }
+  });
 }
 
 async function saveOutbound() {
@@ -108,35 +148,21 @@ async function saveOutbound() {
   const date = document.getElementById('ob_date').value || null;
   const note = document.getElementById('ob_note').value.trim() || null;
 
-  const skus = document.querySelectorAll('#obItemRows .ob-sku');
-  const qtys = document.querySelectorAll('#obItemRows .ob-qty');
   const items = [];
-  for (let i = 0; i < skus.length; i++) {
-    const sku = skus[i].value.trim();
-    const qty = parseInt(qtys[i].value) || 0;
-    if (!sku || qty <= 0) continue;
-    items.push({ sku, qty });
+  for (let i = 0; i < 10; i++) {
+    const pid = document.getElementById('obPid' + i).value;
+    const qty = parseInt(document.getElementById('obQty' + i).value) || 0;
+    if (!pid || qty <= 0) continue;
+    items.push({ product_id: pid, planned_qty: qty });
   }
   if (!items.length) { toast('明細を1行以上入力してください', 'error'); return; }
-
-  const { data: prods } = await sb.from('products')
-    .select('id, sku').in('sku', items.map(it => it.sku)).is('deleted_at', null);
-  const skuMap = {};
-  (prods || []).forEach(p => skuMap[p.sku] = p.id);
-  for (const it of items) {
-    if (!skuMap[it.sku]) { toast('商品が見つかりません: ' + it.sku, 'error'); return; }
-  }
 
   const { data: order, error: oErr } = await sb.from('outbound_orders')
     .insert({ slip_no: slip, customer, planned_date: date, note, status: 'pending', created_by: App.user?.id })
     .select().single();
   if (oErr) { toast('登録失敗: ' + oErr.message, 'error'); return; }
 
-  const itemRows = items.map(it => ({
-    order_id: order.id,
-    product_id: skuMap[it.sku],
-    planned_qty: it.qty,
-  }));
+  const itemRows = items.map(it => ({ order_id: order.id, ...it }));
   const { error: iErr } = await sb.from('outbound_items').insert(itemRows);
   if (iErr) { toast('明細登録失敗: ' + iErr.message, 'error'); return; }
 
@@ -147,7 +173,7 @@ async function saveOutbound() {
 
 async function openObDetail(orderId) {
   const { data: order } = await sb.from('outbound_orders')
-    .select('*, outbound_items(*, products(sku, name), locations:from_location_id(code))')
+    .select('*, outbound_items(*, products(sku, name, jan_code), locations:from_location_id(code))')
     .eq('id', orderId).single();
   if (!order) return;
 
@@ -160,9 +186,9 @@ async function openObDetail(orderId) {
       <div><span class="flbl">状態: </span>${statusBadge(order.status)}</div>
     </div>
     <div class="tw"><table>
-      <thead><tr><th>SKU</th><th>商品名</th><th>予定</th><th>ピック済</th><th>ロケ</th><th>状態</th></tr></thead>
+      <thead><tr><th>JAN</th><th>商品名</th><th>予定</th><th>ピック済</th><th>ロケ</th><th>状態</th></tr></thead>
       <tbody>${items.map(it => `<tr>
-        <td style="font-family:var(--mono);font-size:11px;">${esc(it.products?.sku)}</td>
+        <td style="font-family:var(--mono);font-size:11px;">${esc(it.products?.jan_code || it.products?.sku)}</td>
         <td>${esc(it.products?.name)}</td>
         <td style="font-family:var(--mono);">${it.planned_qty}</td>
         <td style="font-family:var(--mono);${it.picked_qty > 0 ? 'color:var(--accent);' : ''}">${it.picked_qty || '—'}</td>
@@ -183,7 +209,6 @@ async function openObPick(orderId) {
   const pending = (order.outbound_items || []).filter(it => it.status !== 'shipped');
   if (!pending.length) { toast('全明細が出荷済みです'); return; }
 
-  // Load inventory for FIFO selection
   const productIds = [...new Set(pending.map(it => it.product_id))];
   const { data: invRows } = await sb.from('v_inventory_with_names')
     .select('*')

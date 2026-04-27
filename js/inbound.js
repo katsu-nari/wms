@@ -85,7 +85,7 @@ async function openInboundModal() {
   for (let i = 0; i < 10; i++) {
     rowsHtml += `<tr id="ibRow${i}">
       <td style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:4px 6px;">${i + 1}</td>
-      <td style="padding:4px 3px;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;" placeholder="JANコード" data-row="${i}" onchange="ibJanLookup(${i})"></td>
+      <td style="padding:4px 3px;"><div style="display:flex;gap:2px;align-items:center;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;flex:1;" placeholder="JAN" data-row="${i}" onchange="ibJanLookup(${i})"><button class="btn-scan" onclick="ibScanRow(${i})" style="padding:3px 5px;font-size:0;" title="スキャン"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg></button></div></td>
       <td style="padding:4px 3px;"><span class="ib-pname" id="ibPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" class="ib-pid" id="ibPid${i}"></td>
       <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
       <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
@@ -127,6 +127,16 @@ async function openInboundModal() {
     <button class="btn btn-p" onclick="saveInbound()">登録</button>
   `;
   openModal('入庫登録', body, footer, true);
+}
+
+function ibScanRow(row) {
+  startScan((code) => {
+    const janInput = document.querySelector(`#ibRow${row} .ib-jan`);
+    if (janInput) {
+      janInput.value = code;
+      ibJanLookup(row);
+    }
+  });
 }
 
 function ibJanLookup(row) {

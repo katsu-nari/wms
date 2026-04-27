@@ -313,6 +313,48 @@ function downloadCSV(filename, header, rows) {
 function isAdmin() { return App.role === 'admin'; }
 function isOperator() { return App.role === 'admin' || App.role === 'operator'; }
 
+// ---------- Barcode Scanner ----------
+let _scanner = null;
+let _scanCallback = null;
+
+function startScan(callback) {
+  _scanCallback = callback;
+  const overlay = document.getElementById('scanOverlay');
+  overlay.classList.add('open');
+  _scanner = new Html5Qrcode('scanReader');
+  _scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 280, height: 120 }, formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+    ]},
+    (decodedText) => {
+      stopScan();
+      if (_scanCallback) _scanCallback(decodedText);
+    },
+    () => {}
+  ).catch(err => {
+    toast('カメラを起動できません: ' + err, 'error');
+    stopScan();
+  });
+}
+
+function stopScan() {
+  const overlay = document.getElementById('scanOverlay');
+  overlay.classList.remove('open');
+  if (_scanner) {
+    try { _scanner.stop().catch(() => {}); } catch(e) {}
+    try { _scanner.clear(); } catch(e) {}
+    _scanner = null;
+  }
+}
+
+function scanBtnHtml(onclick) {
+  return `<button class="btn-scan" onclick="${onclick}" title="バーコードスキャン"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="13" y2="8"/><line x1="7" y1="16" x2="15" y2="16"/></svg>スキャン</button>`;
+}
+
 // ---------- Boot ----------
 (async function boot() {
   initPinInputs();

@@ -146,6 +146,13 @@ tr:hover td{background:var(--surface2);}
 .empty-state p{font-size:13px;}
 .pb{background:var(--surface2);border-radius:4px;height:5px;overflow:hidden;}
 .pf{height:100%;border-radius:4px;transition:width .3s;}
+.scan-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:350;align-items:center;justify-content:center;padding:12px;}
+.scan-ov.open{display:flex;}
+.scan-box{background:var(--surface);border-radius:12px;width:100%;max-width:400px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.15);}
+.scan-hd{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.btn-scan{background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:4px 7px;color:var(--accent);display:inline-flex;align-items:center;gap:4px;font-size:11px;font-family:var(--sans);transition:all .15s;}
+.btn-scan:hover{background:var(--accent-light);border-color:var(--accent);}
+.btn-scan svg{width:14px;height:14px;}
 
 @media(max-width:768px){
   .sidebar{display:none;}
@@ -322,10 +329,23 @@ tr:hover td{background:var(--surface2);}
   <div class="modal" id="modalContent"></div>
 </div>
 
+<!-- BARCODE SCANNER OVERLAY -->
+<div class="scan-ov" id="scanOverlay">
+  <div class="scan-box">
+    <div class="scan-hd">
+      <div class="modal-title">バーコードスキャン</div>
+      <button class="modal-x" onclick="stopScan()">×</button>
+    </div>
+    <div id="scanReader" style="width:100%;"></div>
+    <div style="padding:10px 16px;font-size:11px;color:var(--text2);text-align:center;">カメラをJANコードのバーコードに向けてください</div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast-wrap" id="toastWrap"></div>
 
 <!-- SCRIPTS -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/app.js"></script>
 <script src="js/dashboard.js"></script>
