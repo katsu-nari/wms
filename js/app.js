@@ -316,23 +316,47 @@ function isOperator() { return App.role === 'admin' || App.role === 'operator'; 
 // ---------- Barcode Scanner ----------
 let _scanner = null;
 let _scanCallback = null;
+let _lastScanResult = '';
+let _scanConfirmCount = 0;
 
 function startScan(callback) {
   _scanCallback = callback;
+  _lastScanResult = '';
+  _scanConfirmCount = 0;
   const overlay = document.getElementById('scanOverlay');
   overlay.classList.add('open');
   _scanner = new Html5Qrcode('scanReader');
   _scanner.start(
     { facingMode: 'environment' },
-    { fps: 10, qrbox: { width: 280, height: 120 }, formatsToSupport: [
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-    ]},
+    {
+      fps: 15,
+      qrbox: function(vw, vh) {
+        var s = Math.min(vw, vh);
+        return { width: Math.floor(s * 0.85), height: Math.floor(s * 0.35) };
+      },
+      aspectRatio: 1.0,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.ITF,
+      ],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    },
     (decodedText) => {
-      stopScan();
-      if (_scanCallback) _scanCallback(decodedText);
+      if (decodedText === _lastScanResult) {
+        _scanConfirmCount++;
+      } else {
+        _lastScanResult = decodedText;
+        _scanConfirmCount = 1;
+      }
+      if (_scanConfirmCount >= 2) {
+        try { navigator.vibrate(100); } catch(e) {}
+        stopScan();
+        if (_scanCallback) _scanCallback(decodedText);
+      }
     },
     () => {}
   ).catch(err => {
