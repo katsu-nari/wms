@@ -316,53 +316,63 @@ function isOperator() { return App.role === 'admin' || App.role === 'operator'; 
 // ---------- Barcode Scanner ----------
 let _scanner = null;
 let _scanCallback = null;
-let _lastScanResult = '';
-let _scanConfirmCount = 0;
 
 function startScan(callback) {
   _scanCallback = callback;
-  _lastScanResult = '';
-  _scanConfirmCount = 0;
   const overlay = document.getElementById('scanOverlay');
+  const manualInput = document.getElementById('scanManual');
+  const statusEl = document.getElementById('scanStatus');
+  if (manualInput) manualInput.value = '';
+  if (statusEl) statusEl.textContent = 'カメラ起動中...';
   overlay.classList.add('open');
+
   _scanner = new Html5Qrcode('scanReader');
-  _scanner.start(
-    { facingMode: 'environment' },
-    {
-      fps: 15,
-      qrbox: function(vw, vh) {
-        var s = Math.min(vw, vh);
-        return { width: Math.floor(s * 0.85), height: Math.floor(s * 0.35) };
-      },
-      aspectRatio: 1.0,
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.ITF,
-      ],
-      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+
+  const config = {
+    fps: 20,
+    qrbox: function(vw, vh) {
+      return { width: Math.floor(vw * 0.9), height: Math.floor(vh * 0.4) };
     },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.ITF,
+    ],
+  };
+
+  const cameraConstraints = {
+    facingMode: 'environment',
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    focusMode: { ideal: 'continuous' },
+  };
+
+  _scanner.start(
+    cameraConstraints,
+    config,
     (decodedText) => {
-      if (decodedText === _lastScanResult) {
-        _scanConfirmCount++;
-      } else {
-        _lastScanResult = decodedText;
-        _scanConfirmCount = 1;
-      }
-      if (_scanConfirmCount >= 2) {
-        try { navigator.vibrate(100); } catch(e) {}
-        stopScan();
-        if (_scanCallback) _scanCallback(decodedText);
-      }
+      try { navigator.vibrate([50, 30, 50]); } catch(e) {}
+      stopScan();
+      if (_scanCallback) _scanCallback(decodedText);
+      toast('読み取り: ' + decodedText);
     },
     () => {}
-  ).catch(err => {
-    toast('カメラを起動できません: ' + err, 'error');
-    stopScan();
+  ).then(() => {
+    if (statusEl) statusEl.textContent = 'バーコードを枠内に合わせてください';
+  }).catch(err => {
+    console.error('Camera error:', err);
+    if (statusEl) statusEl.textContent = 'カメラを起動できません。下の入力欄から手動入力してください。';
   });
+}
+
+function submitManualScan() {
+  const val = (document.getElementById('scanManual')?.value || '').trim();
+  if (!val) { toast('コードを入力してください', 'error'); return; }
+  stopScan();
+  if (_scanCallback) _scanCallback(val);
 }
 
 function stopScan() {
