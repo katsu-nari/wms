@@ -326,12 +326,15 @@ function startScan(callback) {
   if (statusEl) statusEl.textContent = 'カメラ起動中...';
   overlay.classList.add('open');
 
+  const readerEl = document.getElementById('scanReader');
+  if (readerEl) readerEl.innerHTML = '';
+
   _scanner = new Html5Qrcode('scanReader');
 
   const config = {
-    fps: 20,
+    fps: 15,
     qrbox: function(vw, vh) {
-      return { width: Math.floor(vw * 0.9), height: Math.floor(vh * 0.4) };
+      return { width: Math.floor(vw * 0.85), height: Math.floor(vh * 0.35) };
     },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
@@ -339,19 +342,11 @@ function startScan(callback) {
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.CODE_39,
       Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.ITF,
     ],
   };
 
-  const cameraConstraints = {
-    facingMode: 'environment',
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    focusMode: { ideal: 'continuous' },
-  };
-
   _scanner.start(
-    cameraConstraints,
+    { facingMode: 'environment' },
     config,
     (decodedText) => {
       try { navigator.vibrate([50, 30, 50]); } catch(e) {}
@@ -379,9 +374,9 @@ function stopScan() {
   const overlay = document.getElementById('scanOverlay');
   overlay.classList.remove('open');
   if (_scanner) {
-    try { _scanner.stop().catch(() => {}); } catch(e) {}
-    try { _scanner.clear(); } catch(e) {}
+    var s = _scanner;
     _scanner = null;
+    s.stop().then(() => { try { s.clear(); } catch(e) {} }).catch(() => { try { s.clear(); } catch(e) {} });
   }
 }
 
