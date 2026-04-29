@@ -314,70 +314,47 @@ function isAdmin() { return App.role === 'admin'; }
 function isOperator() { return App.role === 'admin' || App.role === 'operator'; }
 
 // ---------- Barcode Scanner ----------
-let _scanner = null;
 let _scanCallback = null;
 
 function startScan(callback) {
   _scanCallback = callback;
   const overlay = document.getElementById('scanOverlay');
-  const manualInput = document.getElementById('scanManual');
-  const statusEl = document.getElementById('scanStatus');
-  if (manualInput) manualInput.value = '';
-  if (statusEl) statusEl.textContent = 'カメラ起動中...';
+  document.getElementById('scanManual').value = '';
+  document.getElementById('scanPhoto').value = '';
+  document.getElementById('scanPhotoStatus').textContent = '';
   overlay.classList.add('open');
-
-  const readerEl = document.getElementById('scanReader');
-  if (readerEl) readerEl.innerHTML = '';
-
-  _scanner = new Html5Qrcode('scanReader');
-
-  const config = {
-    fps: 15,
-    qrbox: function(vw, vh) {
-      return { width: Math.floor(vw * 0.85), height: Math.floor(vh * 0.35) };
-    },
-    formatsToSupport: [
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.UPC_A,
-    ],
-  };
-
-  _scanner.start(
-    { facingMode: 'environment' },
-    config,
-    (decodedText) => {
-      try { navigator.vibrate([50, 30, 50]); } catch(e) {}
-      stopScan();
-      if (_scanCallback) _scanCallback(decodedText);
-      toast('読み取り: ' + decodedText);
-    },
-    () => {}
-  ).then(() => {
-    if (statusEl) statusEl.textContent = 'バーコードを枠内に合わせてください';
-  }).catch(err => {
-    console.error('Camera error:', err);
-    if (statusEl) statusEl.textContent = 'カメラを起動できません。下の入力欄から手動入力してください。';
-  });
 }
 
 function submitManualScan() {
   const val = (document.getElementById('scanManual')?.value || '').trim();
   if (!val) { toast('コードを入力してください', 'error'); return; }
-  stopScan();
+  closeScanOverlay();
   if (_scanCallback) _scanCallback(val);
+  toast('入力: ' + val);
 }
 
-function stopScan() {
-  const overlay = document.getElementById('scanOverlay');
-  overlay.classList.remove('open');
-  if (_scanner) {
-    var s = _scanner;
-    _scanner = null;
-    s.stop().then(() => { try { s.clear(); } catch(e) {} }).catch(() => { try { s.clear(); } catch(e) {} });
-  }
+function handleScanPhoto(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('scanPhotoStatus');
+  statusEl.textContent = '読み取り中...';
+  statusEl.style.color = 'var(--text2)';
+
+  Html5Qrcode.scanFile(file, false)
+    .then(decodedText => {
+      closeScanOverlay();
+      if (_scanCallback) _scanCallback(decodedText);
+      toast('読み取り: ' + decodedText);
+    })
+    .catch(() => {
+      statusEl.textContent = 'バーコードを検出できませんでした。再度撮影してください。';
+      statusEl.style.color = 'var(--red)';
+      input.value = '';
+    });
+}
+
+function closeScanOverlay() {
+  document.getElementById('scanOverlay').classList.remove('open');
 }
 
 function scanBtnHtml(onclick) {
