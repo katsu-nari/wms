@@ -317,16 +317,23 @@ function isOperator() { return App.role === 'admin' || App.role === 'operator'; 
 let _scanCallback = null;
 
 function startScan(callback) {
-  _scanCallback = callback;
-  const overlay = document.getElementById('scanOverlay');
-  document.getElementById('scanManual').value = '';
-  document.getElementById('scanPhoto').value = '';
-  document.getElementById('scanPhotoStatus').textContent = '';
-  overlay.classList.add('open');
+  try {
+    _scanCallback = callback;
+    var ov = document.getElementById('scanOverlay');
+    var mi = document.getElementById('scanManual');
+    var ph = document.getElementById('scanPhoto');
+    var ps = document.getElementById('scanPhotoStatus');
+    if (mi) mi.value = '';
+    if (ph) ph.value = '';
+    if (ps) ps.textContent = '';
+    if (ov) ov.style.display = 'flex';
+  } catch(e) {
+    alert('スキャン起動エラー: ' + e.message);
+  }
 }
 
 function submitManualScan() {
-  const val = (document.getElementById('scanManual')?.value || '').trim();
+  var val = (document.getElementById('scanManual')?.value || '').trim();
   if (!val) { toast('コードを入力してください', 'error'); return; }
   closeScanOverlay();
   if (_scanCallback) _scanCallback(val);
@@ -334,27 +341,30 @@ function submitManualScan() {
 }
 
 function handleScanPhoto(input) {
-  const file = input.files && input.files[0];
+  var file = input.files && input.files[0];
   if (!file) return;
-  const statusEl = document.getElementById('scanPhotoStatus');
-  statusEl.textContent = '読み取り中...';
-  statusEl.style.color = 'var(--text2)';
+  var statusEl = document.getElementById('scanPhotoStatus');
+  if (statusEl) { statusEl.textContent = '読み取り中...'; statusEl.style.color = 'var(--text2)'; }
 
-  Html5Qrcode.scanFile(file, false)
-    .then(decodedText => {
-      closeScanOverlay();
-      if (_scanCallback) _scanCallback(decodedText);
-      toast('読み取り: ' + decodedText);
-    })
-    .catch(() => {
-      statusEl.textContent = 'バーコードを検出できませんでした。再度撮影してください。';
-      statusEl.style.color = 'var(--red)';
-      input.value = '';
-    });
+  if (typeof Html5Qrcode !== 'undefined') {
+    Html5Qrcode.scanFile(file, false)
+      .then(function(decodedText) {
+        closeScanOverlay();
+        if (_scanCallback) _scanCallback(decodedText);
+        toast('読み取り: ' + decodedText);
+      })
+      .catch(function() {
+        if (statusEl) { statusEl.textContent = '読み取れませんでした。再撮影するか手動入力してください。'; statusEl.style.color = 'var(--red)'; }
+        input.value = '';
+      });
+  } else {
+    if (statusEl) { statusEl.textContent = 'スキャンライブラリが読み込めません。手動入力してください。'; statusEl.style.color = 'var(--red)'; }
+  }
 }
 
 function closeScanOverlay() {
-  document.getElementById('scanOverlay').classList.remove('open');
+  var ov = document.getElementById('scanOverlay');
+  if (ov) ov.style.display = 'none';
 }
 
 function scanBtnHtml(onclick) {
