@@ -234,7 +234,7 @@ function openModal(title, bodyHtml, footerHtml, wide) {
   m.classList.toggle('wide', !!wide);
   m.innerHTML = `
     <div class="modal-hd">
-      <div class="modal-title">${title}</div>
+      <div class="modal-title">${esc(title)}</div>
       <button class="modal-x" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">${bodyHtml}</div>
@@ -251,7 +251,7 @@ function toast(msg, type) {
   const w = document.getElementById('toastWrap');
   const t = document.createElement('div');
   t.className = 'toast ' + (type === 'error' ? 'e' : 's');
-  t.innerHTML = `<span style="font-size:14px;">${type === 'error' ? '!' : '✓'}</span><span>${msg}</span>`;
+  t.innerHTML = `<span style="font-size:14px;">${type === 'error' ? '!' : '✓'}</span><span>${esc(msg)}</span>`;
   w.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
 }

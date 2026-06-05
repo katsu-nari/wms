@@ -89,7 +89,7 @@ async function searchMoveInventory() {
   if (!sel) return;
   sel.innerHTML = _mvInventory.length
     ? _mvInventory.map(i =>
-        `<option value="${i.id}">${esc(i.location_code)} | ${esc(i.sku)} ${esc(i.product_name)} | 在庫:${i.available_qty}${i.lot_no ? ' | L:' + i.lot_no : ''}</option>`
+        `<option value="${i.id}">${esc(i.location_code)} | ${esc(i.sku)} ${esc(i.product_name)} | 在庫:${i.available_qty}${i.lot_no ? ' | L:' + esc(i.lot_no) : ''}</option>`
       ).join('')
     : '<option disabled>該当する在庫がありません</option>';
 }
