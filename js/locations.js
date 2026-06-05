@@ -104,15 +104,15 @@ function openLocationModal(id) {
   const body = `<div class="fg">
     <div class="fl"><div class="flbl">ロケーションコード *</div><input class="fi" id="lm_code" value="${esc(l?.code || '')}" placeholder="A-01-01-1-A" ${l ? 'readonly style="opacity:.6"' : ''}></div>
     <div class="fr">
-      <div class="fl"><div class="flbl">ゾーン *</div><input class="fi" id="lm_zone" value="${esc(l?.zone || '')}" placeholder="A"></div>
-      <div class="fl"><div class="flbl">通路</div><input class="fi" id="lm_aisle" value="${esc(l?.aisle || '')}" placeholder="01"></div>
+      <div class="fl"><div class="flbl">ゾーン *</div><input class="fi" id="lm_zone" value="${esc(l?.zone || '')}" placeholder="A" ${l ? 'readonly style="opacity:.6"' : ''}></div>
+      <div class="fl"><div class="flbl">通路</div><input class="fi" id="lm_aisle" value="${esc(l?.aisle || '')}" placeholder="01" ${l ? 'readonly style="opacity:.6"' : ''}></div>
     </div>
     <div class="fr">
-      <div class="fl"><div class="flbl">棚</div><input class="fi" id="lm_rack" value="${esc(l?.rack || '')}" placeholder="01"></div>
-      <div class="fl"><div class="flbl">段</div><input class="fi" id="lm_level" value="${esc(l?.level || '')}" placeholder="1"></div>
+      <div class="fl"><div class="flbl">棚</div><input class="fi" id="lm_rack" value="${esc(l?.rack || '')}" placeholder="01" ${l ? 'readonly style="opacity:.6"' : ''}></div>
+      <div class="fl"><div class="flbl">段</div><input class="fi" id="lm_level" value="${esc(l?.level || '')}" placeholder="1" ${l ? 'readonly style="opacity:.6"' : ''}></div>
     </div>
     <div class="fr">
-      <div class="fl"><div class="flbl">ビン</div><input class="fi" id="lm_bin" value="${esc(l?.bin || '')}" placeholder="A"></div>
+      <div class="fl"><div class="flbl">ビン</div><input class="fi" id="lm_bin" value="${esc(l?.bin || '')}" placeholder="A" ${l ? 'readonly style="opacity:.6"' : ''}></div>
       <div class="fl"><div class="flbl">保管条件</div><select class="fs" id="lm_cond">
         <option value="ambient" ${l?.storage_condition === 'ambient' ? 'selected' : ''}>常温</option>
         <option value="refrigerated" ${l?.storage_condition === 'refrigerated' ? 'selected' : ''}>冷蔵</option>

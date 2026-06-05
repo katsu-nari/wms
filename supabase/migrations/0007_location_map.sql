@@ -3,7 +3,9 @@
 -- ロケーション別在庫集計ビュー（ロケーションマップ用）
 -- =====================================================================
 
-CREATE OR REPLACE VIEW v_location_summary AS
+CREATE OR REPLACE VIEW v_location_summary
+WITH (security_invoker = true)
+AS
 SELECT
   l.id,
   l.code,
