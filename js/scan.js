@@ -10,6 +10,105 @@ let _lastScanTime = 0;
 let _lastScanCode = '';
 let _lastQrContent = '';
 let _beepAudioCtx = null;
+let _barcodeDetector = null;
+let _bdLoopId = null;
+
+function _getScanConfig() {
+  var config = { fps: 20 };
+  try {
+    config.formatsToSupport = [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.ITF,
+    ];
+  } catch (e) {}
+  return config;
+}
+
+async function _applyAdvancedCamera() {
+  var info = { resolution: '—', zoom: '—', focusMode: '—', barcodeDetector: false };
+  try {
+    var video = document.querySelector('#scan-reader video');
+    if (!video || !video.srcObject) { _updateDebugInfo(info); return; }
+    var track = video.srcObject.getVideoTracks()[0];
+    if (!track) { _updateDebugInfo(info); return; }
+
+    var settings = track.getSettings();
+    info.resolution = (settings.width || '?') + ' x ' + (settings.height || '?');
+    info.focusMode = settings.focusMode || '—';
+
+    var caps = {};
+    if (typeof track.getCapabilities === 'function') caps = track.getCapabilities();
+
+    var advanced = {};
+    if (caps.zoom) {
+      var z = Math.min(1.5, caps.zoom.max);
+      advanced.zoom = z;
+      info.zoom = z + 'x (max:' + caps.zoom.max + ')';
+    }
+    if (caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.indexOf('continuous') >= 0) {
+      advanced.focusMode = 'continuous';
+      info.focusMode = 'continuous';
+    }
+    if (Object.keys(advanced).length > 0) {
+      await track.applyConstraints({ advanced: [advanced] });
+    }
+  } catch (e) {}
+
+  try {
+    if (window.BarcodeDetector) {
+      var supported = await BarcodeDetector.getSupportedFormats();
+      var want = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'];
+      var use = want.filter(function(f) { return supported.indexOf(f) >= 0; });
+      if (use.length > 0) {
+        _barcodeDetector = new BarcodeDetector({ formats: use });
+        info.barcodeDetector = true;
+        _startBarcodeDetectorLoop();
+      }
+    }
+  } catch (e) {}
+
+  _updateDebugInfo(info);
+}
+
+function _startBarcodeDetectorLoop() {
+  if (!_barcodeDetector) return;
+  var video = document.querySelector('#scan-reader video');
+  if (!video) return;
+  var lastT = 0;
+  function loop() {
+    if (!_barcodeDetector || !video.srcObject) return;
+    var now = Date.now();
+    if (now - lastT >= 50) {
+      lastT = now;
+      _barcodeDetector.detect(video)
+        .then(function(codes) {
+          if (codes.length > 0 && codes[0].rawValue) {
+            onScanResult(codes[0].rawValue, null);
+          }
+        })
+        .catch(function() {});
+    }
+    _bdLoopId = requestAnimationFrame(loop);
+  }
+  _bdLoopId = requestAnimationFrame(loop);
+}
+
+function _updateDebugInfo(info) {
+  var el = document.getElementById('scan-debug-info');
+  if (!el) return;
+  el.innerHTML =
+    '<div>Resolution: <span style="color:var(--text2);">' + esc(info.resolution) + '</span></div>' +
+    '<div>Zoom: <span style="color:var(--text2);">' + esc(String(info.zoom)) + '</span></div>' +
+    '<div>Focus: <span style="color:var(--text2);">' + esc(info.focusMode) + '</span></div>' +
+    '<div>BarcodeDetector: <span style="color:' + (info.barcodeDetector ? 'var(--green)' : 'var(--text3)') + ';">' + (info.barcodeDetector ? 'ON' : 'OFF') + '</span></div>';
+}
 
 function _playBeep() {
   var audio = new Audio('sounds/beep.mp3');
@@ -75,11 +174,14 @@ RENDER_FNS.scan = async function renderScan() {
 
       <div class="card mb12">
         <div class="card-body" style="padding:12px;">
-          <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
             <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;margin-right:2px;">対応:</span>
             <span class="badge bb">JAN</span>
             <span class="badge bb">EAN-8</span>
+            <span class="badge bb">UPC</span>
             <span class="badge bb">CODE128</span>
+            <span class="badge bb">CODE39</span>
+            <span class="badge bb">ITF</span>
             <span class="badge bb">QR</span>
           </div>
           <div id="scan-reader" style="width:100%;border-radius:6px;overflow:hidden;background:#000;min-height:200px;display:flex;align-items:center;justify-content:center;">
@@ -89,6 +191,7 @@ RENDER_FNS.scan = async function renderScan() {
             </div>
           </div>
           <div style="text-align:center;padding:6px 0 2px;font-size:11px;color:var(--text3);">カメラをバーコードへ向けてください</div>
+          <div id="scan-debug-info" style="margin-top:4px;padding:5px 8px;background:var(--surface2);border-radius:4px;font-family:var(--mono);font-size:9px;color:var(--text3);display:grid;grid-template-columns:1fr 1fr;gap:1px 12px;"></div>
           <div id="scan-cam-err" style="display:none;padding:12px;background:rgba(200,40,40,.06);border:1px solid rgba(200,40,40,.18);border-radius:6px;margin-top:8px;">
             <div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px;">カメラを使用できません</div>
             <div style="font-size:11px;color:var(--text2);margin-bottom:8px;" id="scan-cam-err-msg">カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可してください。</div>
@@ -153,68 +256,35 @@ async function startLiveScanner() {
       wrap.insertBefore(sel, readerEl.nextSibling);
     }
 
-    var formats = [];
-    try {
-      formats = [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
-        Html5QrcodeSupportedFormats.ITF,
-      ];
-    } catch (e) {}
-
-    var scanConfig = { fps: 20 };
-    if (formats.length) scanConfig.formatsToSupport = formats;
-
     await _scanner.start(
-      { facingMode: { exact: 'environment' } },
-      scanConfig,
+      {
+        facingMode: { exact: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      _getScanConfig(),
       function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
       function onError() {}
     );
+    _applyAdvancedCamera();
   } catch (e) {
-    var msg = e.message || String(e);
-    if (msg.includes('NotAllowedError') || msg.includes('permission') || msg.includes('denied')) {
-      _handleCameraPermissionDenied(msg);
-    } else {
-      _handleCameraPermissionDenied(msg);
-    }
+    _handleCameraPermissionDenied(e.message || String(e));
   }
 }
 
 async function _switchCamera(cameraId) {
   if (!_scanner) return;
   try {
+    if (_bdLoopId) { cancelAnimationFrame(_bdLoopId); _bdLoopId = null; }
+    _barcodeDetector = null;
     await _scanner.stop();
-    var formats = [];
-    try {
-      formats = [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
-        Html5QrcodeSupportedFormats.ITF,
-      ];
-    } catch (e) {}
-
-    var switchConfig = { fps: 20 };
-    if (formats.length) switchConfig.formatsToSupport = formats;
-
     await _scanner.start(
       cameraId,
-      switchConfig,
+      _getScanConfig(),
       function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
       function onError() {}
     );
+    _applyAdvancedCamera();
   } catch (e) {
     _handleCameraPermissionDenied(e.message || String(e));
   }
@@ -248,10 +318,11 @@ function _handleCameraPermissionDenied(msg) {
 }
 
 function stopLiveScanner() {
+  if (_bdLoopId) { cancelAnimationFrame(_bdLoopId); _bdLoopId = null; }
+  _barcodeDetector = null;
   if (!_scanner) return;
   try {
     var state = _scanner.getState();
-    // state 2=SCANNING, 3=PAUSED
     if (state === 2 || state === 3) {
       _scanner.stop().catch(function() {});
     }
