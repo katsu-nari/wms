@@ -1,11 +1,36 @@
 // =====================================================================
 // SUPEREX LogiStation - locations.js
-// ロケーション管理: 一覧 / 新規 / 編集
+// ロケーション管理: 一覧 / 新規 / 編集 / ビジュアルマップ
 // =====================================================================
+
+let _locTab = 'list';
 
 RENDER_FNS.locations = async function renderLocations() {
   const el = document.getElementById('page-locations');
   el.innerHTML = `
+    <div class="tabs" id="locTabs" style="max-width:200px;">
+      <div class="tab active" onclick="setLocTab('list',this)">一覧</div>
+      <div class="tab" onclick="setLocTab('map',this)">マップ</div>
+    </div>
+    <div id="locListView"></div>
+    <div id="locMapView" style="display:none;"></div>
+  `;
+  _locTab = 'list';
+  renderLocList();
+  await loadLocations();
+};
+
+function setLocTab(tab, tabEl) {
+  _locTab = tab;
+  document.querySelectorAll('#locTabs .tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  document.getElementById('locListView').style.display = tab === 'list' ? '' : 'none';
+  document.getElementById('locMapView').style.display = tab === 'map' ? '' : 'none';
+  if (tab === 'map') loadLocMap();
+}
+
+function renderLocList() {
+  document.getElementById('locListView').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:8px;align-items:center;">
         <div class="sbar" style="max-width:260px;">
@@ -26,8 +51,7 @@ RENDER_FNS.locations = async function renderLocations() {
       <tbody id="locTb"></tbody>
     </table></div></div>
   `;
-  await loadLocations();
-};
+}
 
 let _locations = [];
 
@@ -35,7 +59,6 @@ async function loadLocations() {
   const { data } = await sb.from('locations').select('*').order('code');
   _locations = data || [];
 
-  // zone filter
   const zones = [...new Set(_locations.map(l => l.zone))].sort();
   const sel = document.getElementById('locZoneFilter');
   if (sel) {
@@ -130,6 +153,20 @@ async function saveLocation(id) {
   };
   if (!d.code || !d.zone) { toast('コードとゾーンは必須です', 'error'); return; }
 
+  if (!id) {
+    const codeRegex = /^[A-Z]-\d{2}-\d{2}-\d-[A-Z]$/;
+    if (!codeRegex.test(d.code)) {
+      toast('コード形式が不正です（例: A-01-01-1-A）', 'error');
+      return;
+    }
+    const parts = d.code.split('-');
+    d.zone  = parts[0];
+    d.aisle = parts[1];
+    d.rack  = parts[2];
+    d.level = parts[3];
+    d.bin   = parts[4];
+  }
+
   let err;
   if (id) {
     const res = await sb.from('locations').update(d).eq('id', id);
@@ -149,4 +186,139 @@ function exportLocationsCSV() {
   const rows = _locations.map(l => [l.code, l.zone, l.aisle, l.rack, l.level, l.bin, conditionLabel(l.storage_condition), l.pick_priority, l.is_active ? '有効' : '無効']);
   downloadCSV('wms_locations_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);
   toast('ロケーションCSVをダウンロードしました');
+}
+
+// ========================= ロケーションマップ =========================
+
+let _locMapData = [];
+
+async function loadLocMap() {
+  const mapView = document.getElementById('locMapView');
+  if (!mapView) return;
+
+  const zones = [...new Set(_locations.map(l => l.zone))].sort();
+  const selectedZone = zones[0] || 'A';
+
+  mapView.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="fl" style="gap:2px;">
+        <div class="flbl">ゾーン</div>
+        <select class="fs" id="mapZone" style="width:auto;min-width:80px;" onchange="renderLocMapGrid()">
+          ${zones.map(z => `<option value="${esc(z)}">${esc(z)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;font-size:11px;color:var(--text2);margin-top:14px;">
+        <span><span class="lm-legend lm-empty"></span> 空き</span>
+        <span><span class="lm-legend lm-used"></span> 使用中</span>
+        <span><span class="lm-legend lm-inactive"></span> 無効</span>
+      </div>
+    </div>
+    <div id="mapSummary" style="margin-bottom:12px;"></div>
+    <div id="mapGrid"></div>
+  `;
+
+  const { data } = await sb.from('v_location_summary').select('*').order('code');
+  _locMapData = data || [];
+  renderLocMapGrid();
+}
+
+function renderLocMapGrid() {
+  const zone = document.getElementById('mapZone')?.value;
+  if (!zone) return;
+
+  const filtered = _locMapData.filter(d => d.zone === zone);
+
+  const active = filtered.filter(d => d.is_active);
+  const used = active.filter(d => d.total_qty > 0).length;
+  const empty = active.filter(d => d.total_qty === 0).length;
+  const inactive = filtered.filter(d => !d.is_active).length;
+  const totalQty = filtered.reduce((s, d) => s + d.total_qty, 0);
+  const pct = active.length > 0 ? Math.round(used / active.length * 100) : 0;
+
+  document.getElementById('mapSummary').innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;padding:10px 13px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
+      <div>使用率: <strong>${pct}%</strong> (${used}/${active.length})</div>
+      <div>空き: <strong>${empty}</strong></div>
+      <div>無効: <strong>${inactive}</strong></div>
+      <div>合計在庫: <strong>${totalQty.toLocaleString()}個</strong></div>
+    </div>
+  `;
+
+  const aisles = [...new Set(filtered.map(d => d.aisle || '—'))].sort();
+  const racks = [...new Set(filtered.map(d => d.rack || '—'))].sort();
+
+  if (!aisles.length || !racks.length) {
+    document.getElementById('mapGrid').innerHTML = '<div class="empty-state"><p>このゾーンにロケーションがありません</p></div>';
+    return;
+  }
+
+  const cellMap = {};
+  filtered.forEach(d => {
+    const key = (d.aisle || '—') + '-' + (d.rack || '—');
+    if (!cellMap[key]) cellMap[key] = { total_qty: 0, product_count: 0, is_active: true, ids: [] };
+    cellMap[key].total_qty += d.total_qty;
+    cellMap[key].product_count += d.product_count;
+    if (!d.is_active) cellMap[key].is_active = false;
+    cellMap[key].ids.push(d.id);
+  });
+
+  let html = '<div class="lm-grid"><div class="lm-grid-inner"><table class="lm-table"><thead><tr><th></th>';
+  aisles.forEach(a => { html += `<th>${esc(a)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  racks.forEach(r => {
+    html += `<tr><td class="lm-row-hd">${esc(r)}</td>`;
+    aisles.forEach(a => {
+      const key = a + '-' + r;
+      const cell = cellMap[key];
+      if (!cell) {
+        html += '<td></td>';
+        return;
+      }
+      let cls = 'lm-cell ';
+      let content = '';
+      if (!cell.is_active) {
+        cls += 'lm-inactive';
+        content = `<div class="lm-code">${esc(a)}-${esc(r)}</div><div class="lm-label">無効</div>`;
+      } else if (cell.total_qty === 0) {
+        cls += 'lm-empty';
+        content = `<div class="lm-code">${esc(a)}-${esc(r)}</div>`;
+      } else {
+        cls += 'lm-used';
+        content = `<div class="lm-code">${esc(a)}-${esc(r)}</div><div class="lm-qty">${cell.total_qty.toLocaleString()}個</div><div class="lm-sku">${cell.product_count} SKU</div>`;
+      }
+      const idsAttr = cell.ids.map(id => id).join(',');
+      html += `<td><div class="${cls}" onclick="openLocCellDetail('${idsAttr}','${esc(zone)}-${esc(a)}-${esc(r)}')">${content}</div></td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div></div>';
+  document.getElementById('mapGrid').innerHTML = html;
+}
+
+async function openLocCellDetail(idsStr, label) {
+  const ids = idsStr.split(',');
+  const { data } = await sb.from('v_inventory_with_names')
+    .select('product_name, lot_no, qty')
+    .in('location_id', ids)
+    .gt('qty', 0)
+    .order('product_name');
+
+  const rows = data || [];
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+
+  const body = rows.length
+    ? `<div class="tw"><table>
+        <thead><tr><th>商品名</th><th>ロット</th><th>数量</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${esc(r.product_name)}</td>
+          <td style="font-family:var(--mono);font-size:11px;">${esc(r.lot_no) || '—'}</td>
+          <td style="font-family:var(--mono);font-weight:700;">${r.qty.toLocaleString()}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="text-align:right;margin-top:10px;font-size:12px;color:var(--text2);">合計: <strong>${totalQty.toLocaleString()}個</strong></div>`
+    : '<div class="empty-state"><p>在庫がありません</p></div>';
+
+  openModal(label + ' の在庫', body, '<button class="btn btn-g" onclick="closeModal()">閉じる</button>');
 }

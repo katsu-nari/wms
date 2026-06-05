@@ -153,6 +153,28 @@ tr:hover td{background:var(--surface2);}
 .btn-scan:hover{background:var(--accent-light);border-color:var(--accent);}
 .btn-scan svg{width:14px;height:14px;}
 
+/* ===== LOCATION MAP ===== */
+.lm-grid{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.lm-grid-inner{min-width:fit-content;}
+.lm-table{border-collapse:separate;border-spacing:4px;}
+.lm-table th{padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--text2);text-align:center;background:transparent;border:none;}
+.lm-table td{padding:0;border:none;vertical-align:top;}
+.lm-table tr:hover td{background:transparent;}
+.lm-row-hd{font-family:var(--mono);font-size:10px;color:var(--text2);text-align:center;padding:4px 8px!important;vertical-align:middle;}
+.lm-cell{min-width:80px;min-height:56px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:box-shadow .15s,transform .15s;display:flex;flex-direction:column;gap:1px;}
+.lm-cell:hover{box-shadow:0 2px 8px rgba(0,0,0,.1);transform:translateY(-1px);}
+.lm-empty{background:var(--surface2);border:1px solid var(--border);}
+.lm-used{background:var(--accent-light);border:1px solid rgba(44,95,158,.18);border-left:3px solid var(--accent);}
+.lm-inactive{background:var(--surface2);border:1px dashed var(--border);opacity:.6;background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(0,0,0,.04) 4px,rgba(0,0,0,.04) 8px);}
+.lm-code{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text2);}
+.lm-qty{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);}
+.lm-sku{font-size:9px;color:var(--text2);}
+.lm-label{font-size:9px;color:var(--text3);}
+.lm-legend{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:3px;}
+.lm-legend.lm-empty{background:var(--surface2);border:1px solid var(--border);}
+.lm-legend.lm-used{background:var(--accent-light);border:1px solid rgba(44,95,158,.18);}
+.lm-legend.lm-inactive{background:var(--surface2);border:1px dashed var(--border);opacity:.6;}
+
 @media(max-width:768px){
   .sidebar{display:none;}
   .bottom-nav{display:flex!important;}
