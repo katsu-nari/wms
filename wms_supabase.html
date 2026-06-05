@@ -168,10 +168,49 @@ tr:hover td{background:var(--surface2);}
   .modal-ov{padding:0;align-items:flex-end;}
   .modal{border-radius:14px 14px 0 0;max-height:88vh;}
 }
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px 28px;width:340px;max-width:92vw;}
+.login-logo{text-align:center;margin-bottom:24px;}
+.login-logo .logo-mark{margin:0 auto 10px;width:44px;height:44px;border-radius:10px;}
+.login-logo .logo-mark svg{width:22px;height:22px;}
+.login-title{font-family:var(--disp);font-weight:800;font-size:20px;text-align:center;margin-bottom:4px;}
+.login-sub{font-family:var(--mono);font-size:10px;color:var(--text2);text-align:center;margin-bottom:20px;}
+.login-field{margin-bottom:14px;}
+.login-field label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:500;}
+.login-field input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;transition:border-color .15s;}
+.login-field input:focus{border-color:var(--accent);}
+.login-btn{width:100%;padding:11px;background:var(--accent);color:var(--bg);border:none;border-radius:var(--r);font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s;margin-top:6px;}
+.login-btn:hover{opacity:.9;}
+.login-btn:disabled{opacity:.5;cursor:not-allowed;}
+.login-error{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.2);border-radius:var(--r);padding:8px 10px;font-size:11px;color:var(--red);margin-bottom:12px;display:none;}
+.login-help{text-align:center;margin-top:16px;font-size:10px;color:var(--text3);}
+.logout-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--text2);font-size:10px;padding:3px 8px;cursor:pointer;margin-top:4px;transition:all .15s;font-family:var(--sans);}
+.logout-btn:hover{border-color:var(--red);color:var(--red);}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
-<div class="app">
+<div class="login-screen" id="loginScreen" style="display:none;">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    </div>
+    <div class="login-title">LogiCore WMS</div>
+    <div class="login-sub">SUPEREX LogiStation</div>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-field">
+      <label>社員番号</label>
+      <input type="text" id="loginEmp" inputmode="numeric" autocomplete="off" placeholder="例: 10042">
+    </div>
+    <div class="login-field">
+      <label>暗証番号 (PIN)</label>
+      <input type="password" id="loginPin" inputmode="numeric" maxlength="8" placeholder="4〜8桁の数字">
+    </div>
+    <button class="login-btn" id="loginBtn" onclick="doLogin()">ログイン</button>
+    <div class="login-help">ログインで困った場合は管理者へ連絡してください</div>
+  </div>
+</div>
+<div class="app" id="appMain">
 <nav class="sidebar">
   <div class="logo"><div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div><div><div class="logo-text">LogiCore</div><div class="logo-sub">WMS v3.0</div></div></div>
   <div class="nav-sec">
@@ -191,7 +230,7 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" onclick="go('master',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="go('location',this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
   </div>
-  <div class="sb-foot"><div class="user-pill"><div class="avatar">田</div><div><div style="font-size:12px;font-weight:500;">田中 太郎</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">倉庫管理者</div></div></div></div>
+  <div class="sb-foot"><div class="user-pill"><div class="avatar" id="sbAvatar">田</div><div><div style="font-size:12px;font-weight:500;" id="sbUserName">田中 太郎</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);" id="sbUserRole">倉庫管理者</div><button class="logout-btn" id="sbLogout" onclick="doLogout()" style="display:none;">ログアウト</button></div></div></div>
 </nav>
 <div class="drawer-bg" id="dBg" onclick="closeDrawer()"></div>
 <nav class="drawer" id="drawer">
@@ -208,7 +247,7 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-item" onclick="go('master');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>商品マスタ</div>
     <div class="nav-item" onclick="go('location');closeDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>ロケーション</div>
   </div>
-  <div class="sb-foot"><div class="user-pill"><div class="avatar">田</div><div><div style="font-size:12px;font-weight:500;">田中 太郎</div></div></div></div>
+  <div class="sb-foot"><div class="user-pill"><div class="avatar" id="drAvatar">田</div><div><div style="font-size:12px;font-weight:500;" id="drUserName">田中 太郎</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);" id="drUserRole">倉庫管理者</div><button class="logout-btn" id="drLogout" onclick="doLogout()" style="display:none;">ログアウト</button></div></div></div>
 </nav>
 <div class="main">
   <div class="topbar">
@@ -458,16 +497,143 @@ tr:hover td{background:var(--surface2);}
 
 <script>
 function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+const AUTH_REQUIRED=false;
 const SB_URL='https://fpobnehdqamuqlepfkrf.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwb2JuZWhkcWFtdXFsZXBma3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTEzMDIsImV4cCI6MjA5MDc4NzMwMn0._Io2LvqCrqe3ZTmQgNpInu_iNAaCqK8Hn-Xp5Ijsnd8';
 const H={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
+const supabaseClient=window.supabase.createClient(SB_URL,SB_KEY);
+const ROLE_LABELS={admin:'管理者',operator:'オペレーター',viewer:'閲覧者'};
+let currentUser=null;
+
+function handle401(r){
+  if(r&&r.status===401&&currentUser){
+    toast('セッションが切れました。再ログインしてください','e');
+    setTimeout(()=>showLogin(),1500);
+    return true;
+  }
+  return false;
+}
+
 const sb={
-  async get(t,q=''){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?order=created_at.desc'+q,{headers:H});return r.ok?await r.json():[];}catch(e){return[];}},
-  async insert(t,d){try{const r=await fetch(SB_URL+'/rest/v1/'+t,{method:'POST',headers:{...H,Prefer:'return=representation'},body:JSON.stringify(d)});return r.ok?await r.json():null;}catch(e){return null;}},
-  async update(t,id,d){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:{...H,Prefer:'return=representation'},body:JSON.stringify(d)});return r.ok?await r.json():null;}catch(e){return null;}},
-  async del(t,id){try{await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});}catch(e){}}
+  async get(t,q=''){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?order=created_at.desc'+q,{headers:H});if(handle401(r))return[];return r.ok?await r.json():[];}catch(e){return[];}},
+  async insert(t,d){try{const r=await fetch(SB_URL+'/rest/v1/'+t,{method:'POST',headers:{...H,Prefer:'return=representation'},body:JSON.stringify(d)});if(handle401(r))return null;return r.ok?await r.json():null;}catch(e){return null;}},
+  async update(t,id,d){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:{...H,Prefer:'return=representation'},body:JSON.stringify(d)});if(handle401(r))return null;return r.ok?await r.json():null;}catch(e){return null;}},
+  async del(t,id){try{const r=await fetch(SB_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE',headers:H});handle401(r);}catch(e){}}
 };
 const S={inv:[],ib:[],ob:[],clients:[],scanN:0,scanMode:'入庫',curScan:null,editId:null};
+
+function showLogin(){
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('appMain').style.display='none';
+  document.getElementById('loginEmp').value='';
+  document.getElementById('loginPin').value='';
+  document.getElementById('loginError').style.display='none';
+  document.getElementById('loginBtn').disabled=false;
+  document.getElementById('loginEmp').focus();
+}
+
+function showApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appMain').style.display='flex';
+}
+
+function updateUserUI(profile){
+  const name=profile?profile.display_name||profile.employee_number:'田中 太郎';
+  const role=profile?ROLE_LABELS[profile.role]||profile.role:'倉庫管理者';
+  const initial=name.slice(0,1);
+  const loggedIn=!!profile;
+  ['sb','dr'].forEach(p=>{
+    const av=document.getElementById(p+'Avatar');if(av)av.textContent=initial;
+    const un=document.getElementById(p+'UserName');if(un)un.textContent=name;
+    const ur=document.getElementById(p+'UserRole');if(ur)ur.textContent=role;
+    const lo=document.getElementById(p+'Logout');if(lo)lo.style.display=loggedIn?'inline-block':'none';
+  });
+}
+
+async function doLogin(){
+  const emp=document.getElementById('loginEmp').value.trim();
+  const pin=document.getElementById('loginPin').value;
+  const errEl=document.getElementById('loginError');
+  const btn=document.getElementById('loginBtn');
+  errEl.style.display='none';
+  if(!emp){errEl.textContent='社員番号を入力してください';errEl.style.display='block';return;}
+  if(!pin||pin.length<4){errEl.textContent='暗証番号は4桁以上で入力してください';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='ログイン中...';
+  try{
+    const email=emp+'@wms.internal';
+    const{data,error}=await supabaseClient.auth.signInWithPassword({email,password:pin});
+    if(error){
+      const msg=error.message||'';
+      if(msg.includes('Invalid login')||msg.includes('invalid')){
+        errEl.textContent='社員番号またはPINが正しくありません';
+      }else if(msg.includes('Email not confirmed')){
+        errEl.textContent='アカウントが未確認です。管理者に連絡してください';
+      }else{
+        errEl.textContent='ログインに失敗しました: '+msg;
+      }
+      errEl.style.display='block';btn.disabled=false;btn.textContent='ログイン';return;
+    }
+    const token=data.session.access_token;
+    H.Authorization='Bearer '+token;
+    const profiles=await sb.get('profiles','&id=eq.'+data.user.id+'&limit=1');
+    if(profiles.length){
+      currentUser={id:data.user.id,employee_number:profiles[0].employee_number,display_name:profiles[0].display_name,role:profiles[0].role};
+      await sb.update('profiles',data.user.id,{last_login_at:new Date().toISOString()});
+    }else{
+      currentUser={id:data.user.id,employee_number:emp,display_name:emp,role:'viewer'};
+    }
+    updateUserUI(currentUser);
+    showApp();
+    toast('ログインしました: '+esc(currentUser.display_name));
+    renderDash();
+  }catch(e){
+    errEl.textContent='通信に失敗しました。ネットワークを確認してください';
+    errEl.style.display='block';
+  }
+  btn.disabled=false;btn.textContent='ログイン';
+}
+
+async function doLogout(){
+  await supabaseClient.auth.signOut();
+  H.Authorization='Bearer '+SB_KEY;
+  currentUser=null;
+  S.inv=[];S.ib=[];S.ob=[];S.clients=[];S.scanN=0;S.scanMode='入庫';S.curScan=null;S.editId=null;
+  updateUserUI(null);
+  showLogin();
+  toast('ログアウトしました');
+}
+
+async function restoreSession(){
+  try{
+    const{data:{session}}=await supabaseClient.auth.getSession();
+    if(session){
+      H.Authorization='Bearer '+session.access_token;
+      const profiles=await sb.get('profiles','&id=eq.'+session.user.id+'&limit=1');
+      if(profiles.length){
+        currentUser={id:session.user.id,employee_number:profiles[0].employee_number,display_name:profiles[0].display_name,role:profiles[0].role};
+      }else{
+        const emp=session.user.email.replace('@wms.internal','');
+        currentUser={id:session.user.id,employee_number:emp,display_name:emp,role:'viewer'};
+      }
+      updateUserUI(currentUser);
+      return true;
+    }
+  }catch(e){console.error('session restore:',e);}
+  return false;
+}
+
+supabaseClient.auth.onAuthStateChange((event,session)=>{
+  if(event==='TOKEN_REFRESHED'&&session){
+    H.Authorization='Bearer '+session.access_token;
+  }else if(event==='SIGNED_OUT'){
+    H.Authorization='Bearer '+SB_KEY;
+    currentUser=null;
+    updateUserUI(null);
+  }
+});
+
+document.getElementById('loginPin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('loginEmp').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPin').focus();});
 const TITLES={dashboard:'ダッシュボード',clients:'クライアント管理',inbound:'入庫処理',outbound:'出庫処理',scan:'スキャン',inventory:'在庫一覧',master:'商品マスタ管理',location:'ロケーション管理'};
 
 function go(page,el){
@@ -849,6 +1015,16 @@ function exportCsv(type){
 }
 
 (async()=>{
+  const hasSession=await restoreSession();
+  if(!hasSession&&AUTH_REQUIRED){
+    showLogin();
+    return;
+  }
+  if(!hasSession&&!AUTH_REQUIRED){
+    showApp();
+  }else{
+    showApp();
+  }
   try{await renderDash();}catch(e){console.error('renderDash:',e);}
   try{renderLoc();}catch(e){console.error('renderLoc:',e);}
 })();
