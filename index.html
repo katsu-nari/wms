@@ -153,6 +153,14 @@ tr:hover td{background:var(--surface2);}
 .btn-scan:hover{background:var(--accent-light);border-color:var(--accent);}
 .btn-scan svg{width:14px;height:14px;}
 
+/* ===== SCAN PAGE ===== */
+#scan-reader { min-height: 200px; }
+#scan-reader video { border-radius: 6px; }
+#scan-reader__dashboard_section_swaplink { display: none !important; }
+#scan-reader__camera_selection { font-family: var(--sans); font-size: 12px; }
+#scan-reader__scan_region { border-radius: 6px; overflow: hidden; }
+#scan-reader__filescan_input { display: none !important; }
+
 /* ===== LOCATION MAP ===== */
 .lm-grid{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .lm-grid-inner{min-width:fit-content;}
@@ -250,6 +258,8 @@ tr:hover td{background:var(--surface2);}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/><polyline points="9 21 3 21 3 15"/><line x1="3" y1="21" x2="10" y2="14"/></svg>ロケ移動</div>
     <div class="nav-item" data-page="stocktake" onclick="go('stocktake',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>棚卸</div>
+    <div class="nav-item" data-page="scan" onclick="go('scan',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="6" height="6"/><rect x="16" y="3" width="6" height="6"/><rect x="2" y="15" width="6" height="6"/><line x1="22" y1="15" x2="22" y2="21"/><line x1="19" y1="18" x2="22" y2="18"/><line x1="11" y1="3" x2="11" y2="6"/><line x1="9" y1="9" x2="11" y2="9"/></svg>スキャン</div>
   </div>
   <div class="nav-sec">
     <div class="nav-lbl">MASTER</div>
@@ -317,6 +327,7 @@ tr:hover td{background:var(--surface2);}
     <div class="page" id="page-locations"></div>
     <div class="page" id="page-suppliers"></div>
     <div class="page" id="page-clients"></div>
+    <div class="page" id="page-scan"></div>
     <div class="page" id="page-reports"></div>
     <div class="page" id="page-users"></div>
   </div>
@@ -397,6 +408,7 @@ tr:hover td{background:var(--surface2);}
 <script src="js/move.js"></script>
 <script src="js/suppliers.js"></script>
 <script src="js/clients.js"></script>
+<script src="js/scan.js"></script>
 <script src="js/stocktake.js"></script>
 </body>
 </html>

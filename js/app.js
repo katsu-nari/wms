@@ -45,6 +45,7 @@ const PAGE_TITLES = {
   clients: '荷主マスタ',
   reports: 'レポート / CSV',
   users: 'ユーザー管理',
+  scan: 'スキャン',
 };
 
 const RENDER_FNS = {};
@@ -191,6 +192,9 @@ function buildDrawerLinks() {
 
 // ---------- Navigation ----------
 function go(page, sidebarEl) {
+  if (App.currentPage === 'scan' && page !== 'scan') {
+    if (typeof stopLiveScanner === 'function') stopLiveScanner();
+  }
   App.currentPage = page;
 
   // Pages
