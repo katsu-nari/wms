@@ -12,23 +12,25 @@ let _lastQrContent = '';
 let _beepAudioCtx = null;
 
 function _playBeep() {
-  try {
-    if (!_beepAudioCtx) {
-      _beepAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    var ctx = _beepAudioCtx;
-    if (ctx.state === 'suspended') ctx.resume();
-    var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 2400;
-    osc.type = 'square';
-    gain.gain.setValueAtTime(0.8, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.08);
-  } catch (e) {}
+  var audio = new Audio('sounds/beep.mp3');
+  audio.volume = 1.0;
+  audio.play().catch(function() {
+    try {
+      if (!_beepAudioCtx) _beepAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = _beepAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 2400;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.8, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+  });
 }
 
 function _flashSuccess(productName) {
@@ -86,6 +88,7 @@ RENDER_FNS.scan = async function renderScan() {
               カメラを起動中...
             </div>
           </div>
+          <div style="text-align:center;padding:6px 0 2px;font-size:11px;color:var(--text3);">カメラをバーコードへ向けてください</div>
           <div id="scan-cam-err" style="display:none;padding:12px;background:rgba(200,40,40,.06);border:1px solid rgba(200,40,40,.18);border-radius:6px;margin-top:8px;">
             <div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px;">カメラを使用できません</div>
             <div style="font-size:11px;color:var(--text2);margin-bottom:8px;" id="scan-cam-err-msg">カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可してください。</div>
@@ -156,15 +159,20 @@ async function startLiveScanner() {
         Html5QrcodeSupportedFormats.QR_CODE,
         Html5QrcodeSupportedFormats.EAN_13,
         Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
         Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.ITF,
       ];
     } catch (e) {}
 
-    var scanConfig = { fps: 10, qrbox: { width: 340, height: 160 }, aspectRatio: 2.5 };
+    var scanConfig = { fps: 20 };
     if (formats.length) scanConfig.formatsToSupport = formats;
 
     await _scanner.start(
-      { facingMode: 'environment' },
+      { facingMode: { exact: 'environment' } },
       scanConfig,
       function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
       function onError() {}
@@ -189,11 +197,16 @@ async function _switchCamera(cameraId) {
         Html5QrcodeSupportedFormats.QR_CODE,
         Html5QrcodeSupportedFormats.EAN_13,
         Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
         Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.ITF,
       ];
     } catch (e) {}
 
-    var switchConfig = { fps: 10, qrbox: { width: 340, height: 160 }, aspectRatio: 2.5 };
+    var switchConfig = { fps: 20 };
     if (formats.length) switchConfig.formatsToSupport = formats;
 
     await _scanner.start(
