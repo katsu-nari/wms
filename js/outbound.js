@@ -92,7 +92,10 @@ async function openOutboundModal() {
       <div class="fl"><div class="flbl">荷主</div><select class="fs" id="ob_client"><option value="">-- 選択してください --</option>${_obClients.map(c => `<option value="${c.id}">${esc(c.code)} - ${esc(c.name)}</option>`).join('')}</select></div>
     </div>
     <div class="fr">
+      <div class="fl"><div class="flbl">出荷先</div><input class="fi" id="ob_customer" placeholder="出荷先名（荷主未選択時に使用）"></div>
       <div class="fl"><div class="flbl">出荷予定日</div><input class="fi" id="ob_date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+    </div>
+    <div class="fr">
       <div class="fl"><div class="flbl">備考</div><input class="fi" id="ob_note" placeholder="メモ"></div>
     </div>
     <hr style="border-color:var(--border);">
@@ -150,8 +153,11 @@ function obScanRow(row) {
 async function saveOutbound() {
   const slip = document.getElementById('ob_slip').value.trim() || null;
   const clientId = document.getElementById('ob_client').value || null;
+  const customer = document.getElementById('ob_customer').value.trim() || null;
   const date = document.getElementById('ob_date').value || null;
   const note = document.getElementById('ob_note').value.trim() || null;
+
+  if (!clientId && !customer) { toast('荷主または出荷先を入力してください', 'error'); return; }
 
   const items = [];
   for (let i = 0; i < 10; i++) {
@@ -163,7 +169,7 @@ async function saveOutbound() {
   if (!items.length) { toast('明細を1行以上入力してください', 'error'); return; }
 
   const { data: order, error: oErr } = await sb.from('outbound_orders')
-    .insert({ slip_no: slip, client_id: clientId, planned_date: date, note, status: 'pending', created_by: App.user?.id })
+    .insert({ slip_no: slip, client_id: clientId, customer, planned_date: date, note, status: 'pending', created_by: App.user?.id })
     .select().single();
   if (oErr) { toast('登録失敗: ' + oErr.message, 'error'); return; }
 
