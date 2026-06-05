@@ -457,6 +457,7 @@ tr:hover td{background:var(--surface2);}
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script>
+function esc(s){const d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
 const SB_URL='https://fpobnehdqamuqlepfkrf.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwb2JuZWhkcWFtdXFsZXBma3JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTEzMDIsImV4cCI6MjA5MDc4NzMwMn0._Io2LvqCrqe3ZTmQgNpInu_iNAaCqK8Hn-Xp5Ijsnd8';
 const H={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
@@ -503,7 +504,7 @@ async function renderDash(){
   document.getElementById('kAlertSub').textContent=ac>0?'要対応あり':'問題なし';
   const alerts=[...low.map(i=>({t:'ae',title:'在庫残少',msg:i.name+' / 残'+i.qty+'個',c:'var(--red)'})),...exp.map(i=>({t:'aw',title:'期限切れ接近',msg:i.name+' / '+i.expiry,c:'var(--warn)'})),...ib.filter(i=>i.status==='受付待ち').slice(0,3).map(i=>({t:'ai',title:'入庫受付待ち',msg:i.name,c:'var(--blue)'}))].slice(0,6);
   document.getElementById('alertBadge').textContent=ac+'件';
-  document.getElementById('alertList').innerHTML=alerts.length?alerts.map(a=>'<div class="al '+a.t+'"><div class="aldot" style="background:'+a.c+';"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">'+a.title+'</div><div style="font-size:11px;color:var(--text2);">'+a.msg+'</div></div></div>').join(''):'<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px;">アラートなし ✓</div>';
+  document.getElementById('alertList').innerHTML=alerts.length?alerts.map(a=>'<div class="al '+a.t+'"><div class="aldot" style="background:'+a.c+';"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">'+a.title+'</div><div style="font-size:11px;color:var(--text2);">'+esc(a.msg)+'</div></div></div>').join(''):'<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px;">アラートなし ✓</div>';
   const days7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d.toISOString().slice(0,10);});
   const ibD={},obD={};
   ib.forEach(r=>{const d=(r.date||'').slice(0,10);ibD[d]=(ibD[d]||0)+(r.planned||0);});
@@ -517,7 +518,7 @@ async function renderDash(){
     return '<div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center;"><div style="flex:1;display:flex;gap:1px;align-items:flex-end;width:100%;"><div style="flex:1;background:'+(isT?'var(--accent)':'rgba(0,229,160,.3)')+';height:'+hi+'%;border-radius:2px 2px 0 0;"></div><div style="flex:1;background:'+(isT?'rgba(0,102,255,.8)':'rgba(0,102,255,.35)')+';height:'+ho+'%;border-radius:2px 2px 0 0;"></div></div><span style="font-family:var(--mono);font-size:8px;color:'+(isT?'var(--accent)':'var(--text3)')+';">'+(isT?'今日':dn[new Date(d+'T12:00:00').getDay()])+'</span></div>';
   }).join('');
   const recent=[...ib.slice(0,4).map(r=>({tp:'入庫',name:r.name,c:r.client,qty:r.planned,t:fmtT(r.created_at),st:r.status})),...ob.slice(0,4).map(r=>({tp:'出庫',name:r.name,c:r.client,qty:r.qty,t:fmtT(r.created_at),st:r.status}))].sort((a,b)=>b.t.localeCompare(a.t)).slice(0,6);
-  document.getElementById('recentTb').innerHTML=recent.length?recent.map(r=>'<tr><td><span class="badge '+(r.tp==='入庫'?'bg':'bb')+'">'+r.tp+'</span></td><td>'+r.name+'</td><td class="hm" style="font-size:11px;">'+r.c+'</td><td style="font-family:var(--mono);">'+r.qty+'</td><td style="font-family:var(--mono);color:var(--text2);">'+r.t+'</td><td><span class="badge '+(r.st==='完了'||r.st==='出荷済み'?'bg':'by')+'">'+r.st+'</span></td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3);">まだ操作履歴がありません</td></tr>';
+  document.getElementById('recentTb').innerHTML=recent.length?recent.map(r=>'<tr><td><span class="badge '+(r.tp==='入庫'?'bg':'bb')+'">'+r.tp+'</span></td><td>'+esc(r.name)+'</td><td class="hm" style="font-size:11px;">'+esc(r.c)+'</td><td style="font-family:var(--mono);">'+r.qty+'</td><td style="font-family:var(--mono);color:var(--text2);">'+r.t+'</td><td><span class="badge '+(r.st==='完了'||r.st==='出荷済み'?'bg':'by')+'">'+esc(r.st)+'</span></td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3);">まだ操作履歴がありません</td></tr>';
 }
 function fmtT(ts){try{return new Date(ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});}catch(e){return'—';}}
 
@@ -527,16 +528,16 @@ async function renderClients(){
   const cols=['#0066ff','#00e5a0','#ff6b35','#ffd32a','#9b59b6'];
   if(!S.clients.length){grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3);"><div style="font-size:32px;margin-bottom:8px;">🏢</div><div>クライアントを追加してください</div></div>';return;}
   grid.innerHTML=S.clients.map((c,i)=>{
-    const col=c.color||cols[i%5];
+    const col=/^#[0-9a-fA-F]{6}$/.test(c.color)?c.color:cols[i%5];
     const cnt=S.inv.filter(x=>x.client===c.name).length;
     const pend=S.ib.filter(x=>x.client===c.name&&x.status==='受付待ち').length;
-    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;"><div style="width:36px;height:36px;border-radius:7px;background:'+col+'22;color:'+col+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin-bottom:9px;">'+c.name.slice(0,2)+'</div><div style="font-family:var(--disp);font-size:13px;font-weight:700;margin-bottom:3px;">'+c.name+'</div><div style="font-size:11px;color:var(--text2);">'+(c.contact||'—')+'</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">'+(c.area||'—')+'</div><div style="display:flex;gap:14px;margin-top:9px;"><div><div style="font-family:var(--disp);font-size:17px;font-weight:700;color:'+col+';">'+cnt+'</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">品種</div></div><div><div style="font-family:var(--disp);font-size:17px;font-weight:700;">'+pend+'</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">入庫待</div></div></div></div>';
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;"><div style="width:36px;height:36px;border-radius:7px;background:'+col+'22;color:'+col+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin-bottom:9px;">'+esc(c.name.slice(0,2))+'</div><div style="font-family:var(--disp);font-size:13px;font-weight:700;margin-bottom:3px;">'+esc(c.name)+'</div><div style="font-size:11px;color:var(--text2);">'+esc(c.contact||'—')+'</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">'+esc(c.area||'—')+'</div><div style="display:flex;gap:14px;margin-top:9px;"><div><div style="font-family:var(--disp);font-size:17px;font-weight:700;color:'+col+';">'+cnt+'</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">品種</div></div><div><div style="font-family:var(--disp);font-size:17px;font-weight:700;">'+pend+'</div><div style="font-family:var(--mono);font-size:9px;color:var(--text2);">入庫待</div></div></div></div>';
   }).join('');
 }
 
 async function renderIB(){
   S.ib=await sb.get('inbound');
-  document.getElementById('ibTb').innerHTML=S.ib.length?S.ib.map(r=>'<tr><td style="font-family:var(--mono);font-size:10px;color:var(--text2);">'+(r.slip_no||r.order_id||r.id.slice(0,8))+'</td><td>'+r.name+'</td><td class="hm" style="font-size:11px;">'+r.client+'</td><td style="font-family:var(--mono);">'+r.planned+'</td><td class="hm" style="font-family:var(--mono);">'+(r.location||'—')+'</td><td class="hm" style="font-family:var(--mono);color:var(--text2);">'+(r.date||'—')+'</td><td><span class="badge '+(r.status==='完了'?'bg':'by')+'">'+r.status+'</span></td><td>'+(r.status!=='完了'?'<button class="btn btn-p btn-sm" onclick="complIB(''+r.id+'')">完了</button>':'—')+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3);">入庫データがありません</td></tr>';
+  document.getElementById('ibTb').innerHTML=S.ib.length?S.ib.map(r=>'<tr><td style="font-family:var(--mono);font-size:10px;color:var(--text2);">'+esc(r.slip_no||r.order_id||r.id.slice(0,8))+'</td><td>'+esc(r.name)+'</td><td class="hm" style="font-size:11px;">'+esc(r.client)+'</td><td style="font-family:var(--mono);">'+r.planned+'</td><td class="hm" style="font-family:var(--mono);">'+esc(r.location||'—')+'</td><td class="hm" style="font-family:var(--mono);color:var(--text2);">'+esc(r.date||'—')+'</td><td><span class="badge '+(r.status==='完了'?'bg':'by')+'">'+esc(r.status)+'</span></td><td>'+(r.status!=='完了'?'<button class="btn btn-p btn-sm" onclick="complIB(''+r.id+'')">完了</button>':'—')+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3);">入庫データがありません</td></tr>';
 }
 
 async function complIB(id){
@@ -561,7 +562,7 @@ async function complIB(id){
 
 async function renderOB(){
   S.ob=await sb.get('outbound');
-  document.getElementById('obTb').innerHTML=S.ob.length?S.ob.map(r=>'<tr><td style="font-family:var(--mono);font-size:10px;color:var(--text2);">'+(r.order_id||r.id.slice(0,8))+'</td><td>'+r.name+'</td><td class="hm" style="font-size:11px;">'+r.client+'</td><td style="font-family:var(--mono);">'+r.qty+'</td><td class="hm" style="font-size:11px;">'+(r.destination||'—')+'</td><td class="hm" style="font-family:var(--mono);color:var(--text2);">'+(r.date||'—')+'</td><td><span class="badge '+(r.status==='出荷済み'?'bg':'by')+'">'+r.status+'</span></td><td>'+(r.status!=='出荷済み'?'<button class="btn btn-p btn-sm" onclick="complOB(''+r.id+'')">完了</button>':'—')+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3);">出庫データがありません</td></tr>';
+  document.getElementById('obTb').innerHTML=S.ob.length?S.ob.map(r=>'<tr><td style="font-family:var(--mono);font-size:10px;color:var(--text2);">'+esc(r.order_id||r.id.slice(0,8))+'</td><td>'+esc(r.name)+'</td><td class="hm" style="font-size:11px;">'+esc(r.client)+'</td><td style="font-family:var(--mono);">'+r.qty+'</td><td class="hm" style="font-size:11px;">'+esc(r.destination||'—')+'</td><td class="hm" style="font-family:var(--mono);color:var(--text2);">'+esc(r.date||'—')+'</td><td><span class="badge '+(r.status==='出荷済み'?'bg':'by')+'">'+esc(r.status)+'</span></td><td>'+(r.status!=='出荷済み'?'<button class="btn btn-p btn-sm" onclick="complOB(''+r.id+'')">完了</button>':'—')+'</td></tr>').join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3);">出庫データがありません</td></tr>';
 }
 
 async function complOB(id){
@@ -576,12 +577,12 @@ async function renderInv(filter){
   const cf=document.getElementById('invClientF')?.value||'';
   const clients=[...new Set(S.inv.map(i=>i.client).filter(Boolean))];
   const sel=document.getElementById('invClientF');
-  if(sel)sel.innerHTML='<option value="">全クライアント</option>'+clients.map(c=>'<option'+(cf===c?' selected':'')+'>'+c+'</option>').join('');
+  if(sel)sel.innerHTML='<option value="">全クライアント</option>'+clients.map(c=>'<option'+(cf===c?' selected':'')+' value="'+esc(c)+'">'+esc(c)+'</option>').join('');
   const f=filter||document.getElementById('invSearch')?.value||'';
   let data=S.inv;
   if(f){const q=f.toLowerCase();data=data.filter(i=>(i.barcode||'').includes(q)||(i.name||'').toLowerCase().includes(q));}
   if(cf)data=data.filter(i=>i.client===cf);
-  document.getElementById('invTb').innerHTML=data.length?data.map(i=>'<tr><td style="font-family:var(--mono);font-size:11px;">'+(i.barcode||i.sku||'—')+'</td><td>'+i.name+'</td><td class="hm" style="font-size:11px;">'+(i.client||'—')+'</td><td style="font-family:var(--mono);text-align:right;font-weight:700;color:'+(i.qty<=0?'var(--red)':i.qty<=(i.min_stock||10)?'var(--yellow)':'var(--text)')+';">'+(i.qty||0).toLocaleString()+'</td><td class="hm" style="font-family:var(--mono);">'+(i.location||'—')+'</td><td class="hm" style="font-family:var(--mono);font-size:10px;">'+(i.lot||'—')+'</td><td><span class="badge '+(i.qty<=0?'br':i.qty<=(i.min_stock||10)?'by':'bg')+'">'+(i.qty<=0?'在庫なし':i.qty<=(i.min_stock||10)?'残少':'正常')+'</span></td></tr>').join(''):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3);">データがありません</td></tr>';
+  document.getElementById('invTb').innerHTML=data.length?data.map(i=>'<tr><td style="font-family:var(--mono);font-size:11px;">'+esc(i.barcode||i.sku||'—')+'</td><td>'+esc(i.name)+'</td><td class="hm" style="font-size:11px;">'+esc(i.client||'—')+'</td><td style="font-family:var(--mono);text-align:right;font-weight:700;color:'+(i.qty<=0?'var(--red)':i.qty<=(i.min_stock||10)?'var(--yellow)':'var(--text)')+';">'+(i.qty||0).toLocaleString()+'</td><td class="hm" style="font-family:var(--mono);">'+esc(i.location||'—')+'</td><td class="hm" style="font-family:var(--mono);font-size:10px;">'+esc(i.lot||'—')+'</td><td><span class="badge '+(i.qty<=0?'br':i.qty<=(i.min_stock||10)?'by':'bg')+'">'+(i.qty<=0?'在庫なし':i.qty<=(i.min_stock||10)?'残少':'正常')+'</span></td></tr>').join(''):'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3);">データがありません</td></tr>';
 }
 function filterInv(v){renderInv(v);}
 
@@ -590,7 +591,7 @@ async function renderMaster(filter){
   const cf=document.getElementById('masterClientF')?.value||'';
   const clients=[...new Set(S.inv.map(i=>i.client).filter(Boolean))];
   const sel=document.getElementById('masterClientF');
-  if(sel)sel.innerHTML='<option value="">全クライアント</option>'+clients.map(c=>'<option'+(cf===c?' selected':'')+'>'+c+'</option>').join('');
+  if(sel)sel.innerHTML='<option value="">全クライアント</option>'+clients.map(c=>'<option'+(cf===c?' selected':'')+' value="'+esc(c)+'">'+esc(c)+'</option>').join('');
   const f=filter||document.getElementById('masterSearch')?.value||'';
   let data=S.inv;
   if(f){const q=f.toLowerCase();data=data.filter(i=>(i.barcode||'').includes(q)||(i.name||'').toLowerCase().includes(q)||(i.maker||'').toLowerCase().includes(q));}
@@ -600,7 +601,7 @@ async function renderMaster(filter){
   document.getElementById('mOut').textContent=S.inv.filter(i=>i.qty<=0).length;
   document.getElementById('mLow').textContent=S.inv.filter(i=>i.qty>0&&i.qty<=(i.min_stock||10)).length;
   document.getElementById('masterCount').textContent=data.length+'件';
-  document.getElementById('masterTb').innerHTML=data.length?data.map(i=>'<tr><td style="font-family:var(--mono);font-size:11px;">'+(i.barcode||i.sku||'—')+'</td><td style="font-weight:500;">'+i.name+'</td><td class="hm" style="font-size:11px;color:var(--text2);">'+(i.maker||'—')+'</td><td class="hm" style="font-size:11px;">'+(i.client||'—')+'</td><td style="font-family:var(--mono);text-align:right;">¥'+(i.cost_price||0).toLocaleString()+'</td><td style="font-family:var(--mono);text-align:right;">¥'+(i.sell_price||0).toLocaleString()+'</td><td style="font-family:var(--mono);text-align:right;">'+(i.unit_per_case||1)+'</td><td style="font-family:var(--mono);text-align:right;font-weight:700;color:'+(i.qty<=0?'var(--red)':i.qty<=(i.min_stock||10)?'var(--yellow)':'var(--text)')+';">'+(i.qty||0).toLocaleString()+'</td><td class="hm" style="font-family:var(--mono);">'+(i.location||'—')+'</td><td><span class="badge '+(i.qty<=0?'br':i.qty<=(i.min_stock||10)?'by':'bg')+'">'+(i.qty<=0?'在庫なし':i.qty<=(i.min_stock||10)?'残少':'正常')+'</span></td><td><div style="display:flex;gap:4px;"><button class="btn btn-g btn-sm" onclick="editMaster(''+i.id+'')">編集</button><button class="btn btn-d btn-sm" onclick="delMaster(''+i.id+'',''+i.name.replace(/'/g,"\'")+'')">削除</button></div></td></tr>').join(''):'<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3);"><div style="font-size:26px;margin-bottom:7px;">📋</div><div>商品を登録してください</div></td></tr>';
+  document.getElementById('masterTb').innerHTML=data.length?data.map(i=>'<tr><td style="font-family:var(--mono);font-size:11px;">'+esc(i.barcode||i.sku||'—')+'</td><td style="font-weight:500;">'+esc(i.name)+'</td><td class="hm" style="font-size:11px;color:var(--text2);">'+esc(i.maker||'—')+'</td><td class="hm" style="font-size:11px;">'+esc(i.client||'—')+'</td><td style="font-family:var(--mono);text-align:right;">¥'+(i.cost_price||0).toLocaleString()+'</td><td style="font-family:var(--mono);text-align:right;">¥'+(i.sell_price||0).toLocaleString()+'</td><td style="font-family:var(--mono);text-align:right;">'+(i.unit_per_case||1)+'</td><td style="font-family:var(--mono);text-align:right;font-weight:700;color:'+(i.qty<=0?'var(--red)':i.qty<=(i.min_stock||10)?'var(--yellow)':'var(--text)')+';">'+(i.qty||0).toLocaleString()+'</td><td class="hm" style="font-family:var(--mono);">'+esc(i.location||'—')+'</td><td><span class="badge '+(i.qty<=0?'br':i.qty<=(i.min_stock||10)?'by':'bg')+'">'+(i.qty<=0?'在庫なし':i.qty<=(i.min_stock||10)?'残少':'正常')+'</span></td><td><div style="display:flex;gap:4px;"><button class="btn btn-g btn-sm" onclick="editMaster(''+i.id+'')">編集</button><button class="btn btn-d btn-sm" onclick="delMaster(''+i.id+'')">削除</button></div></td></tr>').join(''):'<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3);"><div style="font-size:26px;margin-bottom:7px;">📋</div><div>商品を登録してください</div></td></tr>';
 }
 function filterMaster(v){renderMaster(v);}
 
@@ -621,9 +622,10 @@ function editMaster(id){
   document.getElementById('masterModal').classList.add('open');
 }
 
-async function delMaster(id,name){
+async function delMaster(id){
+  const item=S.inv.find(x=>x.id===id);const name=item?item.name:id;
   if(!confirm('「'+name+'」を削除しますか？'))return;
-  await sb.del('inventory',id);toast(name+' を削除しました');renderMaster();
+  await sb.del('inventory',id);toast(esc(name)+' を削除しました');renderMaster();
 }
 
 async function renderLoc(){
@@ -640,7 +642,7 @@ async function renderLoc(){
   invData.forEach(i=>{if(i.location&&i.qty>0){const a=i.location[0];areas[a]=(areas[a]||0)+i.qty;}});
   if(Object.keys(areas).length){
     const maxA=Math.max(...Object.values(areas));
-    stats.innerHTML=Object.entries(areas).sort().map(([a,q])=>'<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px;"><span>エリア'+a+'</span><span style="font-family:var(--mono);font-size:11px;">'+q.toLocaleString()+'個</span></div><div class="pb"><div class="pf" style="width:'+Math.round(q/maxA*100)+'%;background:'+(q/maxA>0.8?'var(--red)':q/maxA>0.5?'var(--yellow)':'var(--green)')+'"></div></div></div>').join('');
+    stats.innerHTML=Object.entries(areas).sort().map(([a,q])=>'<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px;"><span>エリア'+esc(a)+'</span><span style="font-family:var(--mono);font-size:11px;">'+q.toLocaleString()+'個</span></div><div class="pb"><div class="pf" style="width:'+Math.round(q/maxA*100)+'%;background:'+(q/maxA>0.8?'var(--red)':q/maxA>0.5?'var(--yellow)':'var(--green)')+'"></div></div></div>').join('');
   }else{stats.innerHTML='<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px;">在庫データがありません</div>';}
 }
 
@@ -649,7 +651,7 @@ async function showLoc(loc){
   d.innerHTML='<div style="text-align:center;padding:12px;font-size:12px;color:var(--text2);">読み込み中...</div>';
   const items=await sb.get('inventory','&location=eq.'+encodeURIComponent(loc));
   if(!items.length){d.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);"><div style="font-size:22px;margin-bottom:5px;">📭</div><div style="font-family:var(--mono);color:var(--accent);font-size:13px;">'+loc+'</div><div style="margin-top:3px;font-size:12px;">空きロケーション</div></div>';return;}
-  d.innerHTML='<div style="font-family:var(--mono);color:var(--accent);margin-bottom:9px;font-size:12px;">📦 '+loc+'</div>'+items.slice(0,4).map(i=>'<div style="background:var(--surface2);border-radius:6px;padding:9px;margin-bottom:5px;"><div style="font-weight:600;font-size:12px;margin-bottom:2px;">'+i.name+'</div><div style="font-size:10px;color:var(--text2);">'+i.client+'</div><div style="font-family:var(--mono);color:var(--accent);margin-top:3px;font-size:12px;">在庫: '+(i.qty||0).toLocaleString()+'個</div></div>').join('')+(items.length>4?'<div style="font-size:11px;color:var(--text2);text-align:center;">他 '+(items.length-4)+' 件</div>':'');
+  d.innerHTML='<div style="font-family:var(--mono);color:var(--accent);margin-bottom:9px;font-size:12px;">📦 '+esc(loc)+'</div>'+items.slice(0,4).map(i=>'<div style="background:var(--surface2);border-radius:6px;padding:9px;margin-bottom:5px;"><div style="font-weight:600;font-size:12px;margin-bottom:2px;">'+esc(i.name)+'</div><div style="font-size:10px;color:var(--text2);">'+esc(i.client)+'</div><div style="font-family:var(--mono);color:var(--accent);margin-top:3px;font-size:12px;">在庫: '+(i.qty||0).toLocaleString()+'個</div></div>').join('')+(items.length>4?'<div style="font-size:11px;color:var(--text2);text-align:center;">他 '+(items.length-4)+' 件</div>':'');
 }
 
 const IB_ROWS=10;let ibCache={};
@@ -794,7 +796,7 @@ async function processScan(){
     S.curScan.qty=newQty;document.getElementById('scanQtyDisp').textContent='現在庫: '+newQty.toLocaleString()+'個';
   }
   const tb=document.getElementById('scanTb');const row=document.createElement('tr');
-  row.innerHTML='<td style="font-family:var(--mono);font-size:11px;color:var(--text2);">'+t+'</td><td><span class="badge '+(S.scanMode==='入庫'?'bg':'bb')+'">'+S.scanMode+'</span></td><td>'+S.curScan.name+'</td><td style="font-family:var(--mono);">'+qty+'</td>';
+  row.innerHTML='<td style="font-family:var(--mono);font-size:11px;color:var(--text2);">'+t+'</td><td><span class="badge '+(S.scanMode==='入庫'?'bg':'bb')+'">'+S.scanMode+'</span></td><td>'+esc(S.curScan.name)+'</td><td style="font-family:var(--mono);">'+qty+'</td>';
   tb.prepend(row);document.getElementById('scanCnt').textContent='本日: '+S.scanN+'件';document.getElementById('scanQty').value=1;if(navigator.vibrate)navigator.vibrate(50);
   toast(S.scanMode+'完了: '+S.curScan.name+' × '+qty);
 }
@@ -802,7 +804,7 @@ async function processScan(){
 async function openModal(id){
   const today=new Date().toISOString().slice(0,10);
   if(!S.clients.length)S.clients=await sb.get('clients');
-  const cOpts=S.clients.map(c=>'<option>'+c.name+'</option>').join('');
+  const cOpts=S.clients.map(c=>'<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>').join('');
   ['ib_client','ob_client','m_client','scanClient'].forEach(sid=>{const el=document.getElementById(sid);if(el&&cOpts)el.innerHTML=cOpts;});
   if(id==='ibModal'){
     document.getElementById('ib_date').value=today;
@@ -813,7 +815,7 @@ async function openModal(id){
   if(id==='obModal'){
     document.getElementById('ob_date').value=today;
     if(!S.inv.length)S.inv=await sb.get('inventory');
-    document.getElementById('ob_sku').innerHTML=S.inv.map(i=>'<option value="'+(i.barcode||i.sku)+'">'+(i.barcode||i.sku)+' - '+i.name+'</option>').join('');
+    document.getElementById('ob_sku').innerHTML=S.inv.map(i=>'<option value="'+esc(i.barcode||i.sku)+'">'+esc(i.barcode||i.sku)+' - '+esc(i.name)+'</option>').join('');
   }
   if(id==='masterModal'&&!S.editId){
     document.getElementById('masterModalTitle').textContent='商品マスタ登録';
@@ -829,7 +831,7 @@ document.querySelectorAll('.modal-ov').forEach(o=>o.addEventListener('click',e=>
 function toast(msg,type){
   type=type||'s';
   const w=document.getElementById('toastWrap');const t=document.createElement('div');
-  t.className='toast '+type;t.innerHTML='<span style="font-size:14px;">'+(type==='s'?'✓':'✕')+'</span><span>'+msg+'</span>';
+  t.className='toast '+type;t.innerHTML='<span style="font-size:14px;">'+(type==='s'?'✓':'✕')+'</span><span>'+esc(msg)+'</span>';
   w.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
 
