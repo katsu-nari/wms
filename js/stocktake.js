@@ -275,6 +275,13 @@ RENDER_FNS.reports = function renderReports() {
           <button class="btn btn-p" onclick="go('locations');setTimeout(()=>exportLocationsCSV(),500)">ロケCSV</button>
         </div>
       </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">荷主マスタ</div></div>
+        <div class="card-body">
+          <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">全荷主のマスタデータ</p>
+          <button class="btn btn-p" onclick="exportClientsCSV()">荷主CSV</button>
+        </div>
+      </div>
     </div>
   `;
 };
@@ -300,7 +307,7 @@ async function exportInboundCSV() {
 async function exportOutboundCSV() {
   const from = document.getElementById('rptObFrom')?.value;
   const to = document.getElementById('rptObTo')?.value;
-  let q = sb.from('outbound_orders').select('*, outbound_items(*, products(sku, name))').order('created_at', { ascending: false });
+  let q = sb.from('outbound_orders').select('*, outbound_items(*, products(sku, name)), clients(name)').order('created_at', { ascending: false });
   if (from) q = q.gte('planned_date', from);
   if (to) q = q.lte('planned_date', to);
   const { data } = await q;
@@ -308,11 +315,19 @@ async function exportOutboundCSV() {
   const rows = [];
   (data || []).forEach(o => {
     (o.outbound_items || []).forEach(it => {
-      rows.push([o.slip_no, o.customer, o.planned_date, o.status, it.products?.sku, it.products?.name, it.planned_qty, it.picked_qty]);
+      rows.push([o.slip_no, o.clients?.name || o.customer, o.planned_date, o.status, it.products?.sku, it.products?.name, it.planned_qty, it.picked_qty]);
     });
   });
   downloadCSV('wms_outbound_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);
   toast('出庫履歴CSVをダウンロードしました');
+}
+
+async function exportClientsCSV() {
+  const { data } = await sb.from('clients').select('*').order('code');
+  const header = ['コード', '荷主名', '担当者', '電話番号', 'メール', '住所', '有効'];
+  const rows = (data || []).map(c => [c.code, c.name, c.contact, c.phone, c.email, c.address, c.is_active ? '有効' : '無効']);
+  downloadCSV('wms_clients_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);
+  toast('荷主マスタCSVをダウンロードしました');
 }
 
 // ========================= ユーザー管理 =========================

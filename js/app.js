@@ -42,6 +42,7 @@ const PAGE_TITLES = {
   products: '商品マスタ',
   locations: 'ロケーション管理',
   suppliers: '仕入先マスタ',
+  clients: '荷主マスタ',
   reports: 'レポート / CSV',
   users: 'ユーザー管理',
 };

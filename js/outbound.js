@@ -26,6 +26,7 @@ RENDER_FNS.outbound = async function renderOutbound() {
 let _obOrders = [];
 let _obTabFilter = 'all';
 let _obProducts = [];
+let _obClients = [];
 
 function setObTab(tab, tabEl) {
   _obTabFilter = tab;
@@ -36,7 +37,7 @@ function setObTab(tab, tabEl) {
 
 async function loadOutbound() {
   const { data } = await sb.from('outbound_orders')
-    .select('*, outbound_items(id, product_id, planned_qty, picked_qty, status)')
+    .select('*, outbound_items(id, product_id, planned_qty, picked_qty, status), clients(name)')
     .order('created_at', { ascending: false });
   _obOrders = data || [];
   renderObTable();
@@ -53,7 +54,7 @@ function renderObTable() {
         const totalQty = items.reduce((s, it) => s + (it.planned_qty || 0), 0);
         return `<tr>
           <td style="font-family:var(--mono);font-size:11px;">${esc(o.slip_no || o.id.slice(0, 8))}</td>
-          <td class="hm">${esc(o.customer) || '—'}</td>
+          <td class="hm">${esc(o.clients?.name || o.customer) || '—'}</td>
           <td style="font-family:var(--mono);font-size:11px;">${fmtDate(o.planned_date)}</td>
           <td class="hm" style="font-family:var(--mono);">${items.length}行</td>
           <td style="font-family:var(--mono);">${totalQty.toLocaleString()}</td>
@@ -68,8 +69,12 @@ function renderObTable() {
 }
 
 async function openOutboundModal() {
-  const { data } = await sb.from('products').select('id, sku, name, jan_code').is('deleted_at', null).order('sku');
-  _obProducts = data || [];
+  const [prodRes, cliRes] = await Promise.all([
+    sb.from('products').select('id, sku, name, jan_code').is('deleted_at', null).order('sku'),
+    sb.from('clients').select('id, code, name').eq('is_active', true).order('code'),
+  ]);
+  _obProducts = prodRes.data || [];
+  _obClients = cliRes.data || [];
 
   let rowsHtml = '';
   for (let i = 0; i < 10; i++) {
@@ -84,7 +89,7 @@ async function openOutboundModal() {
   const body = `<div class="fg">
     <div class="fr">
       <div class="fl"><div class="flbl">伝票番号</div><input class="fi" id="ob_slip" placeholder="自動採番（空可）"></div>
-      <div class="fl"><div class="flbl">出荷先</div><input class="fi" id="ob_customer" placeholder="出荷先名"></div>
+      <div class="fl"><div class="flbl">荷主</div><select class="fs" id="ob_client"><option value="">-- 選択してください --</option>${_obClients.map(c => `<option value="${c.id}">${esc(c.code)} - ${esc(c.name)}</option>`).join('')}</select></div>
     </div>
     <div class="fr">
       <div class="fl"><div class="flbl">出荷予定日</div><input class="fi" id="ob_date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
@@ -144,7 +149,7 @@ function obScanRow(row) {
 
 async function saveOutbound() {
   const slip = document.getElementById('ob_slip').value.trim() || null;
-  const customer = document.getElementById('ob_customer').value.trim() || null;
+  const clientId = document.getElementById('ob_client').value || null;
   const date = document.getElementById('ob_date').value || null;
   const note = document.getElementById('ob_note').value.trim() || null;
 
@@ -158,7 +163,7 @@ async function saveOutbound() {
   if (!items.length) { toast('明細を1行以上入力してください', 'error'); return; }
 
   const { data: order, error: oErr } = await sb.from('outbound_orders')
-    .insert({ slip_no: slip, customer, planned_date: date, note, status: 'pending', created_by: App.user?.id })
+    .insert({ slip_no: slip, client_id: clientId, planned_date: date, note, status: 'pending', created_by: App.user?.id })
     .select().single();
   if (oErr) { toast('登録失敗: ' + oErr.message, 'error'); return; }
 
@@ -173,7 +178,7 @@ async function saveOutbound() {
 
 async function openObDetail(orderId) {
   const { data: order } = await sb.from('outbound_orders')
-    .select('*, outbound_items(*, products(sku, name, jan_code), locations:from_location_id(code))')
+    .select('*, outbound_items(*, products(sku, name, jan_code), locations:from_location_id(code)), clients(name)')
     .eq('id', orderId).single();
   if (!order) return;
 
@@ -181,7 +186,7 @@ async function openObDetail(orderId) {
   const body = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px;">
       <div><span class="flbl">伝票No: </span>${esc(order.slip_no || '—')}</div>
-      <div><span class="flbl">出荷先: </span>${esc(order.customer || '—')}</div>
+      <div><span class="flbl">出荷先: </span>${esc(order.clients?.name || order.customer || '—')}</div>
       <div><span class="flbl">予定日: </span>${fmtDate(order.planned_date)}</div>
       <div><span class="flbl">状態: </span>${statusBadge(order.status)}</div>
     </div>
