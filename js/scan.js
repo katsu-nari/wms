@@ -8,6 +8,31 @@ let _scanMode = 'check';
 let _scanHistory = [];
 let _lastScanTime = 0;
 let _lastScanCode = '';
+let _lastQrContent = '';
+
+function _playBeep() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 1400;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.12);
+  } catch (e) {}
+}
+
+function _flashSuccess() {
+  var el = document.getElementById('scan-reader');
+  if (!el) return;
+  el.style.outline = '3px solid var(--green)';
+  el.style.outlineOffset = '0px';
+  setTimeout(function() { el.style.outline = ''; el.style.outlineOffset = ''; }, 300);
+}
 
 RENDER_FNS.scan = async function renderScan() {
   stopLiveScanner();
@@ -25,6 +50,13 @@ RENDER_FNS.scan = async function renderScan() {
 
       <div class="card mb12">
         <div class="card-body" style="padding:12px;">
+          <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+            <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;margin-right:2px;">対応:</span>
+            <span class="badge bb">JAN</span>
+            <span class="badge bb">EAN-8</span>
+            <span class="badge bb">CODE128</span>
+            <span class="badge bb">QR</span>
+          </div>
           <div id="scan-reader" style="width:100%;border-radius:6px;overflow:hidden;background:#000;min-height:200px;display:flex;align-items:center;justify-content:center;">
             <div style="color:#fff;font-size:12px;text-align:center;padding:20px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:32px;height:32px;margin:0 auto 8px;display:block;opacity:.5;"><rect x="2" y="3" width="6" height="6"/><rect x="16" y="3" width="6" height="6"/><rect x="2" y="15" width="6" height="6"/><line x1="22" y1="15" x2="22" y2="21"/><line x1="19" y1="18" x2="22" y2="18"/><line x1="11" y1="3" x2="11" y2="6"/><line x1="9" y1="9" x2="11" y2="9"/><line x1="11" y1="11" x2="11" y2="9"/><line x1="9" y1="3" x2="9" y2="3"/></svg>
@@ -95,10 +127,23 @@ async function startLiveScanner() {
       wrap.insertBefore(sel, readerEl.nextSibling);
     }
 
+    var formats = [];
+    try {
+      formats = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+      ];
+    } catch (e) {}
+
+    var scanConfig = { fps: 10, qrbox: { width: 340, height: 160 }, aspectRatio: 2.5 };
+    if (formats.length) scanConfig.formatsToSupport = formats;
+
     await _scanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 250, height: 120 }, aspectRatio: 1.7 },
-      function onSuccess(decodedText) { onScanResult(decodedText); },
+      scanConfig,
+      function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
       function onError() {}
     );
   } catch (e) {
@@ -115,10 +160,23 @@ async function _switchCamera(cameraId) {
   if (!_scanner) return;
   try {
     await _scanner.stop();
+    var formats = [];
+    try {
+      formats = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+      ];
+    } catch (e) {}
+
+    var switchConfig = { fps: 10, qrbox: { width: 340, height: 160 }, aspectRatio: 2.5 };
+    if (formats.length) switchConfig.formatsToSupport = formats;
+
     await _scanner.start(
       cameraId,
-      { fps: 10, qrbox: { width: 250, height: 120 }, aspectRatio: 1.7 },
-      function onSuccess(decodedText) { onScanResult(decodedText); },
+      switchConfig,
+      function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
       function onError() {}
     );
   } catch (e) {
@@ -168,19 +226,31 @@ function stopLiveScanner() {
   if (camSel) camSel.remove();
 }
 
-async function onScanResult(janCode) {
+async function onScanResult(code, scanResult) {
   const now = Date.now();
-  if (janCode === _lastScanCode && now - _lastScanTime < 2000) return;
-  _lastScanCode = janCode;
+  if (code === _lastScanCode && now - _lastScanTime < 2000) return;
+  _lastScanCode = code;
   _lastScanTime = now;
+
+  _playBeep();
+  _flashSuccess();
+
+  var fmt = scanResult && scanResult.result && scanResult.result.format;
+  var isQR = !!(fmt && (fmt.format === 0 || fmt.formatName === 'QR_CODE'));
 
   const resultEl = document.getElementById('scan-result-area');
   if (resultEl) {
     resultEl.innerHTML = `<div class="card card-body" style="text-align:center;padding:20px;color:var(--text2);font-size:12px;">検索中...</div>`;
   }
 
-  const product = await lookupProduct(janCode);
+  const product = await lookupProduct(code);
   if (!product) {
+    if (isQR) {
+      _showQrModal(code);
+      addScanHistory(code, null);
+      if (resultEl) resultEl.innerHTML = '';
+      return;
+    }
     toast('商品マスタに存在しません', 'error');
     if (resultEl) {
       resultEl.innerHTML = `
@@ -188,16 +258,16 @@ async function onScanResult(janCode) {
           <div class="card-body" style="text-align:center;padding:20px;">
             <div style="font-size:28px;margin-bottom:8px;">❌</div>
             <div style="font-weight:600;color:var(--red);margin-bottom:4px;">商品未登録</div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--text2);">${esc(janCode)}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px;">このJANコードは商品マスタに登録されていません</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--text2);">${esc(code)}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px;">このコードは商品マスタに登録されていません</div>
           </div>
         </div>`;
     }
-    addScanHistory(janCode, null);
+    addScanHistory(code, null);
     return;
   }
 
-  addScanHistory(janCode, product);
+  addScanHistory(code, product);
 
   if (_scanMode === 'check') {
     await showCheckResult(product);
@@ -205,6 +275,41 @@ async function onScanResult(janCode) {
     await showInboundResult(product);
   } else if (_scanMode === 'pick') {
     await showPickResult(product);
+  }
+}
+
+function _showQrModal(content) {
+  _lastQrContent = content;
+  var body = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">内容:</div>
+    <div style="background:var(--surface2);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:13px;word-break:break-all;max-height:160px;overflow-y:auto;border:1px solid var(--border);">${esc(content)}</div>
+  `;
+  var footer = `
+    <button class="btn btn-g" onclick="closeModal()">閉じる</button>
+    <button class="btn btn-p" onclick="_copyLastQr()">コピー</button>
+  `;
+  openModal('QRコードを検出しました', body, footer);
+}
+
+function _copyLastQr() {
+  _copyText(_lastQrContent);
+  closeModal();
+}
+
+function _copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(function() { toast('コピーしました'); })
+      .catch(function() { toast('コピー失敗', 'error'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('コピーしました'); }
+    catch (e) { toast('コピー失敗', 'error'); }
+    document.body.removeChild(ta);
   }
 }
 
