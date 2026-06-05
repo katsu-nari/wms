@@ -63,7 +63,7 @@ function setScanMode(mode, tabEl) {
   document.getElementById('scan-result-area').innerHTML = '';
 }
 
-function startLiveScanner() {
+async function startLiveScanner() {
   stopLiveScanner();
 
   const readerEl = document.getElementById('scan-reader');
@@ -75,27 +75,51 @@ function startLiveScanner() {
   if (errEl) errEl.style.display = 'none';
 
   try {
-    _scanner = new Html5QrcodeScanner('scan-reader', {
-      fps: 10,
-      qrbox: { width: 250, height: 120 },
-      rememberLastUsedCamera: true,
-      showTorchButtonIfSupported: true,
-      aspectRatio: 1.7,
-    }, false);
+    _scanner = new Html5Qrcode('scan-reader');
 
-    _scanner.render(
-      function onSuccess(decodedText) {
-        onScanResult(decodedText);
-      },
-      function onError(err) {
-        if (typeof err === 'string' && (
-          err.includes('permission') ||
-          err.includes('NotAllowedError') ||
-          err.includes('denied')
-        )) {
-          _handleCameraPermissionDenied(err);
-        }
-      }
+    var cameras = [];
+    try { cameras = await Html5Qrcode.getCameras(); } catch (e) {}
+
+    if (cameras.length > 1) {
+      var sel = document.createElement('select');
+      sel.className = 'fs';
+      sel.id = 'scan-cam-select';
+      sel.style.cssText = 'font-size:11px;margin-top:6px;';
+      cameras.forEach(function(c) { var o = document.createElement('option'); o.value = c.id; o.textContent = c.label || c.id; sel.appendChild(o); });
+      var back = cameras.find(function(c) { return /back|rear|environment/i.test(c.label); });
+      if (back) sel.value = back.id;
+      sel.onchange = function() { _switchCamera(sel.value); };
+      var wrap = readerEl.parentNode;
+      var existing = document.getElementById('scan-cam-select');
+      if (existing) existing.remove();
+      wrap.insertBefore(sel, readerEl.nextSibling);
+    }
+
+    await _scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 120 }, aspectRatio: 1.7 },
+      function onSuccess(decodedText) { onScanResult(decodedText); },
+      function onError() {}
+    );
+  } catch (e) {
+    var msg = e.message || String(e);
+    if (msg.includes('NotAllowedError') || msg.includes('permission') || msg.includes('denied')) {
+      _handleCameraPermissionDenied(msg);
+    } else {
+      _handleCameraPermissionDenied(msg);
+    }
+  }
+}
+
+async function _switchCamera(cameraId) {
+  if (!_scanner) return;
+  try {
+    await _scanner.stop();
+    await _scanner.start(
+      cameraId,
+      { fps: 10, qrbox: { width: 250, height: 120 }, aspectRatio: 1.7 },
+      function onSuccess(decodedText) { onScanResult(decodedText); },
+      function onError() {}
     );
   } catch (e) {
     _handleCameraPermissionDenied(e.message || String(e));
@@ -132,16 +156,16 @@ function _handleCameraPermissionDenied(msg) {
 function stopLiveScanner() {
   if (!_scanner) return;
   try {
-    _scanner.clear();
-  } catch (e) {
-    // ignore errors during cleanup
-  }
+    var state = _scanner.getState();
+    // state 2=SCANNING, 3=PAUSED
+    if (state === 2 || state === 3) {
+      _scanner.stop().catch(function() {});
+    }
+  } catch (e) {}
+  try { _scanner.clear(); } catch (e) {}
   _scanner = null;
-  // clean up any leftover reader DOM injected by Html5QrcodeScanner
-  const readerEl = document.getElementById('scan-reader');
-  if (readerEl) {
-    readerEl.innerHTML = '';
-  }
+  var camSel = document.getElementById('scan-cam-select');
+  if (camSel) camSel.remove();
 }
 
 async function onScanResult(janCode) {
