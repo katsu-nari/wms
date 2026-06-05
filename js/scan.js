@@ -227,63 +227,55 @@ function setScanMode(mode, tabEl) {
 async function startLiveScanner() {
   stopLiveScanner();
 
-  const readerEl = document.getElementById('scan-reader');
+  var readerEl = document.getElementById('scan-reader');
   if (!readerEl) return;
 
-  readerEl.innerHTML = `<div style="color:#fff;font-size:12px;text-align:center;padding:20px;">カメラを起動中...</div>`;
+  readerEl.innerHTML = '<div style="color:#fff;font-size:12px;text-align:center;padding:20px;">カメラを起動中...</div>';
 
-  const errEl = document.getElementById('scan-cam-err');
+  var errEl = document.getElementById('scan-cam-err');
   if (errEl) errEl.style.display = 'none';
 
-  try {
-    _scanner = new Html5Qrcode('scan-reader');
+  var onOk = function(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); };
+  var onNg = function() {};
+  var cfg = _getScanConfig();
+  var attempts = [{ facingMode: 'environment' }, true];
 
-    var cameras = [];
-    try { cameras = await Html5Qrcode.getCameras(); } catch (e) {}
-
-    if (cameras.length > 1) {
-      var sel = document.createElement('select');
-      sel.className = 'fs';
-      sel.id = 'scan-cam-select';
-      sel.style.cssText = 'font-size:11px;margin-top:6px;';
-      cameras.forEach(function(c) { var o = document.createElement('option'); o.value = c.id; o.textContent = c.label || c.id; sel.appendChild(o); });
-      var back = cameras.find(function(c) { return /back|rear|environment/i.test(c.label); });
-      if (back) sel.value = back.id;
-      sel.onchange = function() { _switchCamera(sel.value); };
-      var wrap = readerEl.parentNode;
-      var existing = document.getElementById('scan-cam-select');
-      if (existing) existing.remove();
-      wrap.insertBefore(sel, readerEl.nextSibling);
-    }
-
-    var onOk = function(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); };
-    var onNg = function() {};
-    var cfg = _getScanConfig();
-
-    var started = false;
-    var attempts = [
-      { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      true,
-    ];
-    for (var i = 0; i < attempts.length; i++) {
-      try {
-        await _scanner.start(attempts[i], cfg, onOk, onNg);
-        started = true;
-        break;
-      } catch (err) {
-        if (i < attempts.length - 1) {
-          try { _scanner.clear(); } catch (x) {}
-          _scanner = new Html5Qrcode('scan-reader');
-        } else {
-          throw err;
-        }
+  for (var i = 0; i < attempts.length; i++) {
+    try {
+      readerEl.innerHTML = '';
+      _scanner = new Html5Qrcode('scan-reader');
+      await _scanner.start(attempts[i], cfg, onOk, onNg);
+      _applyAdvancedCamera();
+      _buildCameraSelector();
+      return;
+    } catch (err) {
+      try { if (_scanner) _scanner.clear(); } catch (x) {}
+      _scanner = null;
+      if (i === attempts.length - 1) {
+        _handleCameraPermissionDenied(err.message || String(err));
       }
     }
-    if (started) _applyAdvancedCamera();
-  } catch (e) {
-    _handleCameraPermissionDenied(e.message || String(e));
   }
+}
+
+async function _buildCameraSelector() {
+  try {
+    var cameras = await Html5Qrcode.getCameras();
+    if (cameras.length <= 1) return;
+    var readerEl = document.getElementById('scan-reader');
+    if (!readerEl) return;
+    var existing = document.getElementById('scan-cam-select');
+    if (existing) existing.remove();
+    var sel = document.createElement('select');
+    sel.className = 'fs';
+    sel.id = 'scan-cam-select';
+    sel.style.cssText = 'font-size:11px;margin-top:6px;';
+    cameras.forEach(function(c) { var o = document.createElement('option'); o.value = c.id; o.textContent = c.label || c.id; sel.appendChild(o); });
+    var back = cameras.find(function(c) { return /back|rear|environment/i.test(c.label); });
+    if (back) sel.value = back.id;
+    sel.onchange = function() { _switchCamera(sel.value); };
+    readerEl.parentNode.insertBefore(sel, readerEl.nextSibling);
+  } catch (e) {}
 }
 
 async function _switchCamera(cameraId) {
