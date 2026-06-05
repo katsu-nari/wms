@@ -256,17 +256,31 @@ async function startLiveScanner() {
       wrap.insertBefore(sel, readerEl.nextSibling);
     }
 
-    await _scanner.start(
-      {
-        facingMode: { exact: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-      },
-      _getScanConfig(),
-      function onSuccess(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); },
-      function onError() {}
-    );
-    _applyAdvancedCamera();
+    var onOk = function(decodedText, decodedResult) { onScanResult(decodedText, decodedResult); };
+    var onNg = function() {};
+    var cfg = _getScanConfig();
+
+    var started = false;
+    var attempts = [
+      { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      true,
+    ];
+    for (var i = 0; i < attempts.length; i++) {
+      try {
+        await _scanner.start(attempts[i], cfg, onOk, onNg);
+        started = true;
+        break;
+      } catch (err) {
+        if (i < attempts.length - 1) {
+          try { _scanner.clear(); } catch (x) {}
+          _scanner = new Html5Qrcode('scan-reader');
+        } else {
+          throw err;
+        }
+      }
+    }
+    if (started) _applyAdvancedCamera();
   } catch (e) {
     _handleCameraPermissionDenied(e.message || String(e));
   }
