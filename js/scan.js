@@ -9,29 +9,52 @@ let _scanHistory = [];
 let _lastScanTime = 0;
 let _lastScanCode = '';
 let _lastQrContent = '';
+let _beepAudioCtx = null;
 
 function _playBeep() {
   try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!_beepAudioCtx) {
+      _beepAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    var ctx = _beepAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.frequency.value = 1400;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc.frequency.value = 2400;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.8, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
     osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.12);
+    osc.stop(ctx.currentTime + 0.08);
   } catch (e) {}
 }
 
-function _flashSuccess() {
+function _flashSuccess(productName) {
   var el = document.getElementById('scan-reader');
   if (!el) return;
   el.style.outline = '3px solid var(--green)';
   el.style.outlineOffset = '0px';
-  setTimeout(function() { el.style.outline = ''; el.style.outlineOffset = ''; }, 300);
+
+  var overlay = document.getElementById('scan-flash-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'scan-flash-overlay';
+    overlay.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(26,133,74,.92);color:#fff;padding:5px 14px;border-radius:16px;font-size:12px;font-weight:600;white-space:nowrap;pointer-events:none;display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+    el.parentNode.style.position = 'relative';
+    el.parentNode.appendChild(overlay);
+  }
+  overlay.innerHTML = '<span style="font-size:14px;">&#10003;</span> 読み取り成功' + (productName ? ' <span style="font-weight:400;opacity:.9;font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;">' + esc(productName) + '</span>' : '');
+  overlay.style.display = 'flex';
+  overlay.style.opacity = '1';
+
+  setTimeout(function() {
+    el.style.outline = '';
+    el.style.outlineOffset = '';
+    if (overlay) { overlay.style.opacity = '0'; overlay.style.transition = 'opacity .15s'; }
+    setTimeout(function() { if (overlay) overlay.style.display = 'none'; }, 150);
+  }, 500);
 }
 
 RENDER_FNS.scan = async function renderScan() {
@@ -233,17 +256,21 @@ async function onScanResult(code, scanResult) {
   _lastScanTime = now;
 
   _playBeep();
-  _flashSuccess();
 
   var fmt = scanResult && scanResult.result && scanResult.result.format;
   var isQR = !!(fmt && (fmt.format === 0 || fmt.formatName === 'QR_CODE'));
 
   const resultEl = document.getElementById('scan-result-area');
   if (resultEl) {
-    resultEl.innerHTML = `<div class="card card-body" style="text-align:center;padding:20px;color:var(--text2);font-size:12px;">検索中...</div>`;
+    resultEl.innerHTML = `<div class="card card-body" style="text-align:center;padding:20px;color:var(--text2);font-size:12px;">
+      <div style="display:inline-block;width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;vertical-align:middle;"></div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+      商品検索中…</div>`;
   }
 
   const product = await lookupProduct(code);
+  _flashSuccess(product ? product.name : null);
+
   if (!product) {
     if (isQR) {
       _showQrModal(code);
