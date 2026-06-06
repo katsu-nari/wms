@@ -14,18 +14,13 @@ let _barcodeDetector = null;
 let _bdLoopId = null;
 
 function _getScanConfig() {
-  var config = { fps: 20 };
+  var config = { fps: 10 };
   try {
     config.formatsToSupport = [
-      Html5QrcodeSupportedFormats.QR_CODE,
       Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.QR_CODE,
       Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
       Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.ITF,
     ];
   } catch (e) {}
   return config;
@@ -178,10 +173,7 @@ RENDER_FNS.scan = async function renderScan() {
             <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;margin-right:2px;">対応:</span>
             <span class="badge bb">JAN</span>
             <span class="badge bb">EAN-8</span>
-            <span class="badge bb">UPC</span>
             <span class="badge bb">CODE128</span>
-            <span class="badge bb">CODE39</span>
-            <span class="badge bb">ITF</span>
             <span class="badge bb">QR</span>
           </div>
           <div id="scan-reader" style="width:100%;border-radius:6px;overflow:hidden;background:#000;min-height:200px;display:flex;align-items:center;justify-content:center;">
