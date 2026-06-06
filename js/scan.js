@@ -11,10 +11,34 @@ let _lastScanCode = '';
 let _lastQrContent = '';
 
 function _playBeep() {
-  console.log('_playBeep: sounds/scan-success.mp3');
   var a = new Audio('sounds/scan-success.mp3');
   a.volume = 1.0;
-  a.play().catch(function(e) { console.warn('beep play failed:', e.message); });
+  console.log('AUDIO SRC', a.src);
+  console.log('READY STATE', a.readyState);
+  a.play().then(function() {
+    console.log('AUDIO PLAYED OK');
+  }).catch(function(e) {
+    console.error('AUDIO ERROR', e);
+    _playBeepFallback();
+  });
+}
+
+function _playBeepFallback() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 2400;
+    gain.gain.value = 0.3;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.1);
+    console.log('BEEP FALLBACK: Web Audio API 2400Hz square 0.1s');
+  } catch (e) {
+    console.error('BEEP FALLBACK FAILED', e);
+  }
 }
 
 function _flashSuccess(productName) {
@@ -118,10 +142,17 @@ async function startLiveScanner() {
 
   var onOk = function(text, result) {
     console.log('SCAN SUCCESS', text);
+    try {
+      var video = document.querySelector('#scan-reader video');
+      if (video && video.srcObject) {
+        var track = video.srcObject.getVideoTracks()[0];
+        if (track) console.log('SCAN TRACK SETTINGS', JSON.stringify(track.getSettings()));
+      }
+    } catch (e) {}
     onScanResult(text, result);
   };
   var onNg = function() {};
-  var cfg = { fps: 10, qrbox: { width: 380, height: 220 } };
+  var cfg = { fps: 15, qrbox: { width: 450, height: 180 } };
   try {
     cfg.formatsToSupport = [
       Html5QrcodeSupportedFormats.EAN_13,
@@ -139,6 +170,7 @@ async function startLiveScanner() {
       cfg, onOk, onNg
     );
     console.log('CAMERA STARTED');
+    _logCameraInfo();
     _updateScanDebug();
   } catch (err) {
     console.error('CAMERA START FAILED:', err);
@@ -163,6 +195,24 @@ function _showCameraError(err) {
       errMsgEl.textContent = name + ': ' + msg;
     }
     errEl.style.display = 'block';
+  }
+}
+
+function _logCameraInfo() {
+  try {
+    var video = document.querySelector('#scan-reader video');
+    if (!video || !video.srcObject) return;
+    var track = video.srcObject.getVideoTracks()[0];
+    if (!track) return;
+    var settings = track.getSettings();
+    console.log('VIDEO TRACK SETTINGS', JSON.stringify(settings));
+    if (typeof track.getCapabilities === 'function') {
+      var caps = track.getCapabilities();
+      if (caps.focusMode) console.log('FOCUS MODES', JSON.stringify(caps.focusMode));
+      if (caps.zoom) console.log('ZOOM RANGE', JSON.stringify(caps.zoom));
+    }
+  } catch (e) {
+    console.error('_logCameraInfo error', e);
   }
 }
 
