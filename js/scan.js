@@ -87,8 +87,10 @@ RENDER_FNS.scan = async function renderScan() {
         <div class="card-body" style="padding:12px;">
           <div style="display:flex;gap:3px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
             <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;margin-right:2px;">対応:</span>
-            <span class="badge bb">JAN (EAN-13)</span>
+            <span class="badge bb">JAN</span>
             <span class="badge bb">EAN-8</span>
+            <span class="badge bb">CODE128</span>
+            <span class="badge bb">QR</span>
           </div>
           <div id="scan-reader" style="width:100%;border-radius:6px;overflow:hidden;background:#000;min-height:200px;display:flex;align-items:center;justify-content:center;">
             <div style="color:#fff;font-size:12px;text-align:center;padding:20px;">カメラを起動中...</div>
@@ -153,11 +155,13 @@ async function startLiveScanner() {
     onScanResult(text, result);
   };
   var onNg = function() {};
-  var cfg = { fps: 15, qrbox: { width: 520, height: 140 } };
+  var cfg = { fps: 15, qrbox: { width: 450, height: 180 } };
   try {
     cfg.formatsToSupport = [
       Html5QrcodeSupportedFormats.EAN_13,
       Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.QR_CODE,
     ];
   } catch (e) {}
 
@@ -165,7 +169,7 @@ async function startLiveScanner() {
     readerEl.innerHTML = '';
     _scanner = new Html5Qrcode('scan-reader');
     await _scanner.start(
-      { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      { facingMode: 'environment' },
       cfg, onOk, onNg
     );
     console.log('CAMERA STARTED');
