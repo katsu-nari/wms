@@ -11,9 +11,10 @@ let _lastScanCode = '';
 let _lastQrContent = '';
 
 function _playBeep() {
+  console.log('_playBeep: sounds/scan-success.mp3');
   var a = new Audio('sounds/scan-success.mp3');
   a.volume = 1.0;
-  a.play().catch(function() {});
+  a.play().catch(function(e) { console.warn('beep play failed:', e.message); });
 }
 
 function _flashSuccess(productName) {
@@ -103,6 +104,7 @@ RENDER_FNS.scan = async function renderScan() {
 
       <div id="scan-result-area" style="margin-bottom:12px;"></div>
       <div id="scan-history-area"></div>
+      <div id="scan-debug" style="margin-top:8px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:9px;color:var(--text3);line-height:1.6;"></div>
     </div>
   `;
 
@@ -130,9 +132,12 @@ async function startLiveScanner() {
   var errEl = document.getElementById('scan-cam-err');
   if (errEl) errEl.style.display = 'none';
 
-  var onOk = function(text, result) { onScanResult(text, result); };
+  var onOk = function(text, result) {
+    console.log('SCAN SUCCESS', text);
+    onScanResult(text, result);
+  };
   var onNg = function() {};
-  var cfg = { fps: 10 };
+  var cfg = { fps: 10, qrbox: { width: 380, height: 220 } };
   try {
     cfg.formatsToSupport = [
       Html5QrcodeSupportedFormats.EAN_13,
@@ -142,26 +147,19 @@ async function startLiveScanner() {
     ];
   } catch (e) {}
 
-  var constraints = [
-    { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-    { facingMode: 'environment' },
-    true,
-  ];
-
-  for (var i = 0; i < constraints.length; i++) {
-    try {
-      readerEl.innerHTML = '';
-      _scanner = new Html5Qrcode('scan-reader');
-      await _scanner.start(constraints[i], cfg, onOk, onNg);
-      _applyCameraSettings();
-      return;
-    } catch (err) {
-      try { if (_scanner) _scanner.clear(); } catch (x) {}
-      _scanner = null;
-      if (i === constraints.length - 1) {
-        _showCameraError(err.message || String(err));
-      }
-    }
+  try {
+    readerEl.innerHTML = '';
+    _scanner = new Html5Qrcode('scan-reader');
+    await _scanner.start(
+      { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      cfg, onOk, onNg
+    );
+    _applyCameraSettings();
+    _updateScanDebug();
+  } catch (err) {
+    try { if (_scanner) _scanner.clear(); } catch (x) {}
+    _scanner = null;
+    _showCameraError(err.message || String(err));
   }
 }
 
@@ -194,6 +192,24 @@ function stopLiveScanner() {
   _scanner = null;
 }
 
+function _updateScanDebug(lastCode) {
+  var el = document.getElementById('scan-debug');
+  if (!el) return;
+  var res = '—', cam = '—';
+  try {
+    var video = document.querySelector('#scan-reader video');
+    if (video && video.srcObject) {
+      var track = video.srcObject.getVideoTracks()[0];
+      if (track) {
+        var s = track.getSettings();
+        res = (s.width || '?') + ' x ' + (s.height || '?');
+        cam = track.label || '—';
+      }
+    }
+  } catch (e) {}
+  el.innerHTML = 'Camera: ' + esc(cam) + '<br>Resolution: ' + esc(res) + '<br>Last code: ' + esc(lastCode || _lastScanCode || '—');
+}
+
 // ---------- Scan Result ----------
 
 async function onScanResult(code, scanResult) {
@@ -203,6 +219,7 @@ async function onScanResult(code, scanResult) {
   _lastScanTime = now;
 
   _playBeep();
+  _updateScanDebug(code);
 
   var fmt = scanResult && scanResult.result && scanResult.result.format;
   var isQR = !!(fmt && (fmt.format === 0 || fmt.formatName === 'QR_CODE'));
