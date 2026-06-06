@@ -41,23 +41,7 @@ function _flashSuccess(productName) {
   }, 500);
 }
 
-async function _applyCameraSettings() {
-  try {
-    var video = document.querySelector('#scan-reader video');
-    if (!video || !video.srcObject) return;
-    var track = video.srcObject.getVideoTracks()[0];
-    if (!track) return;
-    var caps = {};
-    if (typeof track.getCapabilities === 'function') caps = track.getCapabilities();
-    var adv = {};
-    if (caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.indexOf('continuous') >= 0) {
-      adv.focusMode = 'continuous';
-    }
-    if (Object.keys(adv).length > 0) {
-      await track.applyConstraints({ advanced: [adv] });
-    }
-  } catch (e) {}
-}
+// _applyCameraSettings: 一時無効化（デバッグ中）
 
 // ---------- Page Render ----------
 
@@ -151,19 +135,23 @@ async function startLiveScanner() {
     readerEl.innerHTML = '';
     _scanner = new Html5Qrcode('scan-reader');
     await _scanner.start(
-      { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      { facingMode: 'environment' },
       cfg, onOk, onNg
     );
-    _applyCameraSettings();
+    console.log('CAMERA STARTED');
     _updateScanDebug();
   } catch (err) {
+    console.error('CAMERA START FAILED:', err);
     try { if (_scanner) _scanner.clear(); } catch (x) {}
     _scanner = null;
-    _showCameraError(err.message || String(err));
+    _showCameraError(err);
   }
 }
 
-function _showCameraError(msg) {
+function _showCameraError(err) {
+  var name = (err && err.name) || '?';
+  var msg = (err && err.message) || String(err);
+  console.error('_showCameraError:', name, msg);
   var readerEl = document.getElementById('scan-reader');
   if (readerEl) {
     readerEl.innerHTML = '<div style="color:rgba(255,255,255,.5);font-size:12px;text-align:center;padding:30px;">カメラ使用不可</div>';
@@ -172,9 +160,7 @@ function _showCameraError(msg) {
   var errMsgEl = document.getElementById('scan-cam-err-msg');
   if (errEl) {
     if (errMsgEl) {
-      errMsgEl.textContent = (msg && (msg.includes('NotAllowedError') || msg.includes('permission') || msg.includes('denied')))
-        ? 'カメラへのアクセスが拒否されました。ブラウザの設定でカメラを許可してください。'
-        : 'カメラを起動できませんでした。手動入力をご利用ください。';
+      errMsgEl.textContent = name + ': ' + msg;
     }
     errEl.style.display = 'block';
   }
