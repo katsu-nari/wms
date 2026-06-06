@@ -9,6 +9,8 @@ let _scanHistory = [];
 let _lastScanTime = 0;
 let _lastScanCode = '';
 let _lastQrContent = '';
+let _scanGuideTimer2 = null;
+let _scanGuideTimer5 = null;
 
 function _playBeep() {
   var a = new Audio('sounds/scan-success.mp3');
@@ -67,6 +69,41 @@ function _flashSuccess(productName) {
 
 // _applyCameraSettings: 一時無効化（デバッグ中）
 
+function _startScanGuide() {
+  _clearScanGuide();
+  _scanGuideTimer2 = setTimeout(function() {
+    var el = document.getElementById('scan-guide-msg');
+    if (el) {
+      el.textContent = 'バーコードが見つかりません。商品にもう少し近づけてください';
+      el.style.display = 'block';
+    }
+  }, 2000);
+  _scanGuideTimer5 = setTimeout(function() {
+    var el = document.getElementById('scan-guide-msg');
+    if (el) {
+      el.innerHTML = '<div style="font-weight:500;margin-bottom:4px;">読み取りのコツ</div>'
+        + '<div style="display:flex;flex-direction:column;gap:2px;">'
+        + '<span>・15〜20cmまで近づける</span>'
+        + '<span>・バーコードを中央に合わせる</span>'
+        + '<span>・影がかからないようにする</span>'
+        + '</div>';
+      el.style.display = 'block';
+    }
+  }, 5000);
+}
+
+function _clearScanGuide() {
+  if (_scanGuideTimer2) { clearTimeout(_scanGuideTimer2); _scanGuideTimer2 = null; }
+  if (_scanGuideTimer5) { clearTimeout(_scanGuideTimer5); _scanGuideTimer5 = null; }
+  var el = document.getElementById('scan-guide-msg');
+  if (el) { el.style.display = 'none'; el.textContent = ''; }
+}
+
+function _resetScanGuide() {
+  _clearScanGuide();
+  _startScanGuide();
+}
+
 // ---------- Page Render ----------
 
 RENDER_FNS.scan = async function renderScan() {
@@ -101,6 +138,7 @@ RENDER_FNS.scan = async function renderScan() {
             <div style="font-size:11px;color:var(--text2);margin-bottom:8px;" id="scan-cam-err-msg">カメラへのアクセスが拒否されました。</div>
             <div style="font-size:11px;color:var(--text2);">▼ 下の手動入力でコードを直接入力してください</div>
           </div>
+          <div id="scan-guide-msg" style="display:none;padding:10px 12px;background:rgba(var(--accent-rgb,59,130,246),.06);border:1px solid rgba(var(--accent-rgb,59,130,246),.18);border-radius:6px;margin-top:8px;font-size:11px;color:var(--text2);line-height:1.6;"></div>
           <div style="margin-top:10px;display:flex;gap:6px;">
             <input class="fi" id="scan-manual-input" placeholder="JANコードを手動入力..." inputmode="numeric"
               style="font-size:14px;font-family:var(--mono);"
@@ -152,6 +190,7 @@ async function startLiveScanner() {
         if (track) console.log('SCAN TRACK SETTINGS', JSON.stringify(track.getSettings()));
       }
     } catch (e) {}
+    _resetScanGuide();
     onScanResult(text, result);
   };
   var onNg = function() {};
@@ -174,6 +213,7 @@ async function startLiveScanner() {
     );
     console.log('CAMERA STARTED');
     _scanStartMs = Date.now();
+    _startScanGuide();
     _logCameraInfo();
     _updateScanDebug();
   } catch (err) {
@@ -221,6 +261,7 @@ function _logCameraInfo() {
 }
 
 function stopLiveScanner() {
+  _clearScanGuide();
   if (!_scanner) return;
   try {
     var state = _scanner.getState();
