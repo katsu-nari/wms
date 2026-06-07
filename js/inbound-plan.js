@@ -84,7 +84,7 @@ function renderIpTable() {
           <td class="hm" style="font-family:var(--mono);">${totalReceived.toLocaleString()}</td>
           <td><span class="badge ${cls}">${lbl}</span></td>
           <td>
-            <button class="btn btn-g btn-sm" onclick="ipShowDetail('${p.id}')">詳細</button>
+            <button class="btn btn-g btn-sm" onclick="ipGoDetail('${p.id}')">詳細</button>
             ${isOperator() ? `<button class="btn btn-p btn-sm" onclick="ipPrintPdf('${p.id}')">PDF</button>` : ''}
           </td>
         </tr>`;
@@ -92,45 +92,17 @@ function renderIpTable() {
     : '<tr><td colspan="8" class="empty-state">入荷予定データがありません</td></tr>';
 }
 
-// ---------- Detail ----------
+// ---------- Detail Navigation ----------
 
-async function ipShowDetail(planId) {
-  const { data: plan } = await sb.from('inbound_plans')
-    .select('*, clients(name), inbound_plan_items(*, products(sku, name, jan_code))')
-    .eq('id', planId)
-    .single();
-  if (!plan) { toast('データ取得失敗', 'error'); return; }
+function ipGoDetail(planId) {
+  window._ipDetailId = planId;
+  go('inbound-plan-detail');
+}
 
-  const items = plan.inbound_plan_items || [];
-  const rows = items.map((it, i) => {
-    const p = it.products || {};
-    return `<tr>
-      <td style="font-family:var(--mono);font-size:11px;">${i + 1}</td>
-      <td style="font-family:var(--mono);font-size:11px;">${esc(p.jan_code || '—')}</td>
-      <td style="font-family:var(--mono);font-size:11px;">${esc(p.sku || '—')}</td>
-      <td style="font-size:11px;">${esc(p.name || '—')}</td>
-      <td style="font-family:var(--mono);text-align:right;">${it.planned_qty}</td>
-      <td style="font-family:var(--mono);text-align:right;">${it.received_qty || 0}</td>
-      <td style="font-family:var(--mono);font-size:10px;">${esc(it.lot_no || '—')}</td>
-      <td style="font-family:var(--mono);font-size:10px;">${it.expiry_date ? fmtDate(it.expiry_date) : '—'}</td>
-    </tr>`;
-  }).join('');
-
-  const body = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px;">
-      <div><span style="color:var(--text2);">予定番号:</span> <strong>${esc(plan.plan_no)}</strong></div>
-      <div><span style="color:var(--text2);">入荷予定日:</span> ${fmtDate(plan.planned_date)}</div>
-      <div><span style="color:var(--text2);">荷主:</span> ${esc(plan.clients?.name || '—')}</div>
-      <div><span style="color:var(--text2);">ステータス:</span> ${esc(plan.status)}</div>
-    </div>
-    <div class="tw"><table>
-      <thead><tr><th>No</th><th>JAN</th><th>商品コード</th><th>商品名</th><th style="text-align:right;">予定数</th><th style="text-align:right;">実績数</th><th>ロット</th><th>期限</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
-
-  const footer = `<button class="btn btn-g" onclick="closeModal()">閉じる</button>
-    ${isOperator() ? `<button class="btn btn-p" onclick="closeModal();ipPrintPdf('${planId}')">PDF出力</button>` : ''}`;
-  openModal('入荷予定詳細: ' + plan.plan_no, body, footer, true);
+function ipGoDetailByPlanNo(planNo) {
+  window._ipDetailPlanNo = planNo;
+  window._ipDetailId = null;
+  go('inbound-plan-detail');
 }
 
 // ---------- Excel Template Download ----------
@@ -350,23 +322,13 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
 // ---------- Plan No Generation ----------
 
 async function ipGeneratePlanNo(plannedDate) {
-  var dateStr = (plannedDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-  var prefix = 'IP' + dateStr + '-';
-
-  var { data } = await sb.from('inbound_plans')
-    .select('plan_no')
-    .like('plan_no', prefix + '%')
-    .order('plan_no', { ascending: false })
-    .limit(1);
-
-  var seq = 1;
-  if (data && data.length > 0) {
-    var lastNo = data[0].plan_no;
-    var lastSeq = parseInt(lastNo.split('-').pop(), 10);
-    if (!isNaN(lastSeq)) seq = lastSeq + 1;
-  }
-
-  return prefix + String(seq).padStart(4, '0');
+  var date = plannedDate || new Date().toISOString().slice(0, 10);
+  var { data, error } = await sb.rpc('fn_generate_plan_no', {
+    p_document_type: 'IP',
+    p_date: date,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // ---------- Register ----------

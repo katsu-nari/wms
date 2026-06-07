@@ -379,7 +379,7 @@ async function _handleStructuredQr(content, resultEl) {
     var obj = JSON.parse(content);
     if (obj && obj.type === 'inbound_plan' && obj.plan_no) {
       var { data: plan } = await sb.from('inbound_plans')
-        .select('*, clients(name), inbound_plan_items(*, products(sku, name, jan_code))')
+        .select('id, plan_no')
         .eq('plan_no', obj.plan_no)
         .single();
 
@@ -391,46 +391,13 @@ async function _handleStructuredQr(content, resultEl) {
         return true;
       }
 
-      _showInboundPlanFromScan(plan, resultEl);
+      if (typeof ipGoDetailByPlanNo === 'function') {
+        ipGoDetailByPlanNo(obj.plan_no);
+      }
       return true;
     }
   } catch (e) {}
   return false;
-}
-
-function _showInboundPlanFromScan(plan, resultEl) {
-  var items = plan.inbound_plan_items || [];
-  var clientName = plan.clients?.name || '—';
-  var totalPlanned = items.reduce(function(s, it) { return s + (it.planned_qty || 0); }, 0);
-  var totalReceived = items.reduce(function(s, it) { return s + (it.received_qty || 0); }, 0);
-
-  var statusLabels = { planned: '予定', receiving: '入荷中', completed: '完了' };
-  var statusCls = { planned: 'bb', receiving: 'by', completed: 'bg' };
-
-  var rows = items.slice(0, 10).map(function(it, i) {
-    var p = it.products || {};
-    return '<tr>'
-      + '<td style="font-family:var(--mono);font-size:10px;">' + (i + 1) + '</td>'
-      + '<td style="font-size:11px;">' + esc(p.name || '—') + '</td>'
-      + '<td style="font-family:var(--mono);text-align:right;">' + it.planned_qty + '</td>'
-      + '<td style="font-family:var(--mono);text-align:right;">' + (it.received_qty || 0) + '</td>'
-      + '</tr>';
-  }).join('');
-  var moreNote = items.length > 10 ? '<div style="font-size:10px;color:var(--text2);padding:6px 10px;">他 ' + (items.length - 10) + ' 件...</div>' : '';
-
-  if (resultEl) {
-    resultEl.innerHTML = '<div class="card">'
-      + '<div class="card-hd"><div><div class="card-title">' + esc(plan.plan_no) + '</div>'
-      + '<div style="font-size:10px;color:var(--text2);">' + fmtDate(plan.planned_date) + ' / ' + esc(clientName) + '</div></div>'
-      + '<div style="text-align:right;"><span class="badge ' + (statusCls[plan.status] || 'bgr') + '">' + (statusLabels[plan.status] || plan.status) + '</span></div></div>'
-      + '<div class="card-body" style="padding:0;">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px;font-size:12px;">'
-      + '<div><span style="color:var(--text2);">予定数:</span> <strong>' + totalPlanned + '</strong></div>'
-      + '<div><span style="color:var(--text2);">実績数:</span> <strong>' + totalReceived + '</strong></div></div>'
-      + '<div class="tw"><table><thead><tr><th>No</th><th>商品名</th><th style="text-align:right;">予定</th><th style="text-align:right;">実績</th></tr></thead>'
-      + '<tbody>' + rows + '</tbody></table></div>' + moreNote
-      + '</div></div>';
-  }
 }
 
 // ---------- Product Lookup ----------
