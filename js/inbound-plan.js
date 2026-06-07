@@ -311,7 +311,9 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
   `;
 
   var footer = '<button class="btn btn-g" onclick="closeModal()">キャンセル</button>';
-  if (validItems.length > 0) {
+  if (errors.length > 0) {
+    footer += '<span style="font-size:11px;color:var(--red);padding:0 8px;">エラーを全て修正してから登録してください</span>';
+  } else if (validItems.length > 0) {
     footer += '<button class="btn btn-p" id="ipRegBtn" onclick="ipRegister()">登録実行 (' + validItems.length + '件)</button>';
   }
 
@@ -434,107 +436,99 @@ function _generateQrDataUrl(text) {
 }
 
 async function ipPrintPdf(planId) {
-  var { data: plan } = await sb.from('inbound_plans')
+  var res = await sb.from('inbound_plans')
     .select('*, clients(name), inbound_plan_items(*, products(sku, name, jan_code))')
     .eq('id', planId)
     .single();
-  if (!plan) { toast('データ取得失敗', 'error'); return; }
+  if (!res.data) { toast('データ取得失敗', 'error'); return; }
+
+  var plan = res.data;
+  toast('PDF生成中...しばらくお待ちください');
 
   var items = plan.inbound_plan_items || [];
-  var clientName = plan.clients?.name || '—';
+  var clientName = plan.clients ? plan.clients.name : '—';
   var now = new Date();
   var outputDate = now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-
   var totalSku = items.length;
   var totalQty = items.reduce(function(s, it) { return s + (it.planned_qty || 0); }, 0);
 
-  // Generate barcode and QR code
   var barcodeImg = _generateBarcodeDataUrl(plan.plan_no || '');
   var qrContent = JSON.stringify({ type: 'inbound_plan', plan_no: plan.plan_no, version: 1 });
   var qrImg = _generateQrDataUrl(qrContent);
 
+  await document.fonts.ready;
+
   var doc = new jspdf.jsPDF('p', 'mm', 'a4');
-  var pageW = 210;
-  var marginL = 15;
-  var marginR = 15;
-  var contentW = pageW - marginL - marginR;
-  var rowsPerPage = 28;
+  var rowsPerPage = 25;
   var totalPages = Math.ceil(items.length / rowsPerPage) || 1;
 
   for (var page = 0; page < totalPages; page++) {
     if (page > 0) doc.addPage();
 
-    // Header - Title
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('Inspection List', marginL, 15);
-
-    // Header - Left: text + barcode
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text('Plan No: ' + (plan.plan_no || ''), marginL, 22);
-    doc.text('Date: ' + (plan.planned_date || ''), marginL, 27);
-    doc.text('Client: ' + clientName, marginL, 32);
-    doc.text('Printed: ' + outputDate, marginL, 37);
-
-    // Barcode (left side, below text) ~80mm wide x 15mm tall
-    if (barcodeImg) {
-      doc.addImage(barcodeImg, 'PNG', marginL, 39, 80, 15);
-    }
-
-    // Header - Right: QR code ~28mm square
-    if (qrImg) {
-      doc.addImage(qrImg, 'PNG', pageW - marginR - 28, 12, 28, 28);
-    }
-
-    // Table header
-    var startY = 58;
-    var colX = [marginL, marginL + 10, marginL + 40, marginL + 66, marginL + 106, marginL + 128, marginL + 150];
-    var colLabels = ['No', 'JAN', 'SKU', 'Product', 'Plan Qty', 'Actual', 'Check'];
-
-    doc.setFillColor(240, 242, 245);
-    doc.rect(marginL, startY - 4, contentW, 7, 'F');
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'bold');
-    for (var c = 0; c < colLabels.length; c++) {
-      doc.text(colLabels[c], colX[c], startY);
-    }
-
-    // Table rows
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    var rowH = 6.5;
     var startIdx = page * rowsPerPage;
-    var endIdx = Math.min(startIdx + rowsPerPage, items.length);
+    var pageItems = items.slice(startIdx, startIdx + rowsPerPage);
 
-    for (var r = startIdx; r < endIdx; r++) {
-      var item = items[r];
+    var rowsHtml = pageItems.map(function(item, idx) {
       var prod = item.products || {};
-      var y = startY + 7 + (r - startIdx) * rowH;
+      var bg = idx % 2 === 1 ? 'background:#f8f9fb;' : '';
+      return '<tr style="' + bg + '">'
+        + '<td style="width:30px;text-align:center;padding:5px 6px;border-bottom:1px solid #eee;">' + (startIdx + idx + 1) + '</td>'
+        + '<td style="width:112px;font-family:monospace;font-size:10px;padding:5px 6px;border-bottom:1px solid #eee;">' + esc(prod.jan_code || '—') + '</td>'
+        + '<td style="width:90px;font-family:monospace;font-size:10px;padding:5px 6px;border-bottom:1px solid #eee;">' + esc(prod.sku || '—') + '</td>'
+        + '<td style="padding:5px 6px;font-size:11px;border-bottom:1px solid #eee;">' + esc(prod.name || '—') + '</td>'
+        + '<td style="width:55px;text-align:right;font-family:monospace;padding:5px 6px;border-bottom:1px solid #eee;">' + (item.planned_qty || 0) + '</td>'
+        + '<td style="width:66px;padding:5px 6px;border:1px solid #bbb;">&nbsp;</td>'
+        + '<td style="width:36px;text-align:center;padding:5px 6px;border:1px solid #bbb;">&#9744;</td>'
+        + '</tr>';
+    }).join('');
 
-      if ((r - startIdx) % 2 === 1) {
-        doc.setFillColor(248, 249, 251);
-        doc.rect(marginL, y - 4, contentW, rowH, 'F');
-      }
+    var pageHtml = '<div style="width:794px;padding:28px 32px;box-sizing:border-box;font-family:\'Noto Sans JP\',sans-serif;background:#fff;color:#111;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">'
+        + '<div>'
+          + '<div style="font-size:17px;font-weight:700;margin-bottom:10px;">検品リスト</div>'
+          + '<div style="font-size:12px;margin-bottom:3px;"><strong>予定番号:</strong> ' + esc(plan.plan_no) + '</div>'
+          + '<div style="font-size:12px;margin-bottom:3px;"><strong>入荷予定日:</strong> ' + esc(plan.planned_date) + '</div>'
+          + '<div style="font-size:12px;margin-bottom:3px;"><strong>荷主:</strong> ' + esc(clientName) + '</div>'
+          + '<div style="font-size:10px;color:#666;margin-bottom:8px;">出力日時: ' + outputDate + '</div>'
+          + (barcodeImg ? '<img src="' + barcodeImg + '" style="height:38px;">' : '')
+        + '</div>'
+        + (qrImg ? '<img src="' + qrImg + '" style="width:88px;height:88px;">' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:18px;margin-bottom:10px;font-size:12px;">'
+        + '<span>SKU数: <strong>' + totalSku + '</strong></span>'
+        + '<span>予定数量合計: <strong>' + totalQty.toLocaleString() + '</strong></span>'
+        + '<span>ページ: <strong>' + (page + 1) + ' / ' + totalPages + '</strong></span>'
+      + '</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+        + '<thead><tr style="background:#f0f2f5;">'
+          + '<th style="width:30px;text-align:center;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">No</th>'
+          + '<th style="width:112px;text-align:left;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">JANコード</th>'
+          + '<th style="width:90px;text-align:left;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">商品コード</th>'
+          + '<th style="text-align:left;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">商品名</th>'
+          + '<th style="width:55px;text-align:right;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">予定数</th>'
+          + '<th style="width:66px;text-align:center;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">実績数</th>'
+          + '<th style="width:36px;text-align:center;padding:6px;border-bottom:2px solid #ccc;font-family:\'Noto Sans JP\',sans-serif;font-weight:700;">✓</th>'
+        + '</tr></thead>'
+        + '<tbody>' + rowsHtml + '</tbody>'
+      + '</table>'
+      + '<div style="margin-top:14px;font-size:10px;color:#666;border-top:1px solid #ddd;padding-top:8px;">'
+        + 'SKU ' + totalSku + '種 / 予定数量 ' + totalQty.toLocaleString() + '個 | ページ ' + (page + 1) + ' / ' + totalPages
+      + '</div>'
+    + '</div>';
 
-      doc.text(String(r + 1), colX[0], y);
-      doc.text(String(prod.jan_code || '').slice(0, 13), colX[1], y);
-      doc.text(String(prod.sku || '').slice(0, 12), colX[2], y);
-      doc.text(String(prod.name || '').slice(0, 18), colX[3], y);
-      doc.text(String(item.planned_qty || 0), colX[4], y);
-      doc.setDrawColor(180, 180, 180);
-      doc.rect(colX[5], y - 3.5, 18, 5);
-      doc.rect(colX[6], y - 3.5, 5, 5);
-    }
+    var container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    container.innerHTML = pageHtml;
+    document.body.appendChild(container);
 
-    // Footer
-    var footY = 285;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(marginL, footY - 5, pageW - marginR, footY - 5);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Total SKU: ' + totalSku + '  |  Total Qty: ' + totalQty.toLocaleString(), marginL, footY);
-    doc.text('Page ' + (page + 1) + ' / ' + totalPages, pageW - marginR - 20, footY);
+    var canvas = await html2canvas(container.firstElementChild, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    document.body.removeChild(container);
+    doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
   }
 
   doc.save('inspection_' + (plan.plan_no || 'list') + '.pdf');
