@@ -347,6 +347,28 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
   openModal('Excel取込プレビュー', body, footer, true);
 }
 
+// ---------- Plan No Generation ----------
+
+async function ipGeneratePlanNo(plannedDate) {
+  var dateStr = (plannedDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+  var prefix = 'IP' + dateStr + '-';
+
+  var { data } = await sb.from('inbound_plans')
+    .select('plan_no')
+    .like('plan_no', prefix + '%')
+    .order('plan_no', { ascending: false })
+    .limit(1);
+
+  var seq = 1;
+  if (data && data.length > 0) {
+    var lastNo = data[0].plan_no;
+    var lastSeq = parseInt(lastNo.split('-').pop(), 10);
+    if (!isNaN(lastSeq)) seq = lastSeq + 1;
+  }
+
+  return prefix + String(seq).padStart(4, '0');
+}
+
 // ---------- Register ----------
 
 async function ipRegister() {
@@ -357,7 +379,7 @@ async function ipRegister() {
   if (btn) { btn.disabled = true; btn.textContent = '登録中...'; }
 
   try {
-    var planNo = 'IP-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + String(Math.floor(Math.random() * 9000) + 1000);
+    var planNo = await ipGeneratePlanNo(pending.plannedDate);
 
     var { data: plan, error: planErr } = await sb.from('inbound_plans').insert({
       plan_no: planNo,
@@ -403,6 +425,52 @@ function ipShowPrintConfirm(planId, planNo) {
 
 // ---------- PDF Output ----------
 
+function _generateBarcodeDataUrl(text) {
+  var canvas = document.createElement('canvas');
+  try {
+    JsBarcode(canvas, text, {
+      format: 'CODE128',
+      width: 2,
+      height: 50,
+      displayValue: true,
+      fontSize: 12,
+      margin: 4,
+    });
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('Barcode generation failed:', e);
+    return null;
+  }
+}
+
+function _generateQrDataUrl(text) {
+  try {
+    var qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    var size = qr.getModuleCount();
+    var cellSize = 8;
+    var canvas = document.createElement('canvas');
+    canvas.width = size * cellSize;
+    canvas.height = size * cellSize;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    for (var row = 0; row < size; row++) {
+      for (var col = 0; col < size; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('QR generation failed:', e);
+    return null;
+  }
+}
+
 async function ipPrintPdf(planId) {
   var { data: plan } = await sb.from('inbound_plans')
     .select('*, clients(name), inbound_plan_items(*, products(sku, name, jan_code))')
@@ -418,31 +486,47 @@ async function ipPrintPdf(planId) {
   var totalSku = items.length;
   var totalQty = items.reduce(function(s, it) { return s + (it.planned_qty || 0); }, 0);
 
+  // Generate barcode and QR code
+  var barcodeImg = _generateBarcodeDataUrl(plan.plan_no || '');
+  var qrContent = JSON.stringify({ type: 'inbound_plan', plan_no: plan.plan_no, version: 1 });
+  var qrImg = _generateQrDataUrl(qrContent);
+
   var doc = new jspdf.jsPDF('p', 'mm', 'a4');
   var pageW = 210;
   var marginL = 15;
   var marginR = 15;
   var contentW = pageW - marginL - marginR;
-  var rowsPerPage = 30;
+  var rowsPerPage = 28;
   var totalPages = Math.ceil(items.length / rowsPerPage) || 1;
 
   for (var page = 0; page < totalPages; page++) {
     if (page > 0) doc.addPage();
 
-    // Header
+    // Header - Title
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text('Inspection List', marginL, 18);
+    doc.setFontSize(14);
+    doc.text('Inspection List', marginL, 15);
 
+    // Header - Left: text + barcode
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text('Plan No: ' + (plan.plan_no || ''), marginL, 26);
-    doc.text('Date: ' + (plan.planned_date || ''), marginL, 31);
-    doc.text('Client: ' + clientName, marginL, 36);
-    doc.text('Printed: ' + outputDate, pageW - marginR - 50, 26);
+    doc.text('Plan No: ' + (plan.plan_no || ''), marginL, 22);
+    doc.text('Date: ' + (plan.planned_date || ''), marginL, 27);
+    doc.text('Client: ' + clientName, marginL, 32);
+    doc.text('Printed: ' + outputDate, marginL, 37);
+
+    // Barcode (left side, below text) ~80mm wide x 15mm tall
+    if (barcodeImg) {
+      doc.addImage(barcodeImg, 'PNG', marginL, 39, 80, 15);
+    }
+
+    // Header - Right: QR code ~28mm square
+    if (qrImg) {
+      doc.addImage(qrImg, 'PNG', pageW - marginR - 28, 12, 28, 28);
+    }
 
     // Table header
-    var startY = 42;
+    var startY = 58;
     var colX = [marginL, marginL + 10, marginL + 40, marginL + 66, marginL + 106, marginL + 128, marginL + 150];
     var colLabels = ['No', 'JAN', 'SKU', 'Product', 'Plan Qty', 'Actual', 'Check'];
 
@@ -457,7 +541,7 @@ async function ipPrintPdf(planId) {
     // Table rows
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    var rowH = 6;
+    var rowH = 6.5;
     var startIdx = page * rowsPerPage;
     var endIdx = Math.min(startIdx + rowsPerPage, items.length);
 
@@ -476,10 +560,8 @@ async function ipPrintPdf(planId) {
       doc.text(String(prod.sku || '').slice(0, 12), colX[2], y);
       doc.text(String(prod.name || '').slice(0, 18), colX[3], y);
       doc.text(String(item.planned_qty || 0), colX[4], y);
-      // Actual qty - empty for handwriting
       doc.setDrawColor(180, 180, 180);
       doc.rect(colX[5], y - 3.5, 18, 5);
-      // Check box
       doc.rect(colX[6], y - 3.5, 5, 5);
     }
 
