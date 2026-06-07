@@ -252,6 +252,8 @@ tr:hover td{background:var(--surface2);}
     <div class="nav-lbl">OPERATION</div>
     <div class="nav-item" data-page="inbound" onclick="go('inbound',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>入庫処理</div>
+    <div class="nav-item" data-page="inbound-plan" onclick="go('inbound-plan',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>入荷予定</div>
     <div class="nav-item" data-page="outbound" onclick="go('outbound',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/></svg>出庫処理</div>
     <div class="nav-item" data-page="move" onclick="go('move',this)">
@@ -320,6 +322,7 @@ tr:hover td{background:var(--surface2);}
     <div class="page active" id="page-dashboard"></div>
     <div class="page" id="page-inventory"></div>
     <div class="page" id="page-inbound"></div>
+    <div class="page" id="page-inbound-plan"></div>
     <div class="page" id="page-outbound"></div>
     <div class="page" id="page-move"></div>
     <div class="page" id="page-stocktake"></div>
@@ -398,6 +401,8 @@ tr:hover td{background:var(--surface2);}
 <!-- SCRIPTS -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/app.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/products.js"></script>
@@ -409,6 +414,7 @@ tr:hover td{background:var(--surface2);}
 <script src="js/suppliers.js"></script>
 <script src="js/clients.js"></script>
 <script src="js/scan.js"></script>
+<script src="js/inbound-plan.js"></script>
 <script src="js/stocktake.js"></script>
 </body>
 </html>
