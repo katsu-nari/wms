@@ -108,15 +108,15 @@ function ipGoDetailByPlanNo(planNo) {
 // ---------- Excel Template Download ----------
 
 function ipDownloadTemplate() {
-  var header = ['入荷予定日', '荷主コード', 'JANコード', '商品コード', '商品名', '予定数量', 'ロットNo', '賞味期限'];
-  var sample = ['2026-06-15', 'C001', '4901234567890', 'SKU-001', 'サンプル商品A', '100', 'LOT-2026-01', '2027-03-31'];
+  var header = ['入荷予定日', '荷主コード', 'JANコード', '商品名', '予定数量', '賞味期限'];
+  var sample = ['20260615', 'CLIENT001', '4901234567890', 'ミネラルウォーター500ml', '100', '2027/03/31'];
 
   var ws_data = [header, sample];
   var ws = XLSX.utils.aoa_to_sheet(ws_data);
 
   ws['!cols'] = [
-    { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 12 },
-    { wch: 20 }, { wch: 8 }, { wch: 14 }, { wch: 12 }
+    { wch: 12 }, { wch: 12 }, { wch: 16 },
+    { wch: 24 }, { wch: 8 }, { wch: 12 }
   ];
 
   var wb = XLSX.utils.book_new();
@@ -181,11 +181,9 @@ async function ipValidateAndPreview(dataRows) {
     var dateVal = row[0];
     var clientCode = String(row[1] || '').trim();
     var janCode = String(row[2] || '').trim();
-    var productCode = String(row[3] || '').trim();
-    var productName = String(row[4] || '').trim();
-    var qty = row[5];
-    var lotNo = String(row[6] || '').trim();
-    var expiryVal = row[7];
+    var productName = String(row[3] || '').trim();
+    var qty = row[4];
+    var expiryVal = row[5];
 
     var parsedDate = ipParseDate(dateVal);
     if (!parsedDate && i === 0) {
@@ -207,9 +205,7 @@ async function ipValidateAndPreview(dataRows) {
 
     rpcItems.push({
       jan_code: janCode,
-      sku: productCode,
       planned_qty: qty,
-      lot_no: lotNo || null,
       expiry_date: parsedExpiry || null,
     });
     rowMeta.push({ rowNum: rowNum, productName: productName });
@@ -236,10 +232,8 @@ async function ipValidateAndPreview(dataRows) {
         validItems.push({
           product_id: v.product_id,
           jan_code: v.product_jan || rpcItems[j].jan_code,
-          sku: v.product_sku || rpcItems[j].sku,
           product_name: v.product_name || meta.productName,
           planned_qty: v.planned_qty,
-          lot_no: rpcItems[j].lot_no,
           expiry_date: rpcItems[j].expiry_date,
         });
       }
@@ -260,6 +254,11 @@ function ipParseDate(val) {
     return val.toISOString().slice(0, 10);
   }
   var s = String(val).trim();
+  var m8 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m8) {
+    var d8 = new Date(Number(m8[1]), Number(m8[2]) - 1, Number(m8[3]));
+    if (!isNaN(d8.getTime())) return d8.toISOString().slice(0, 10);
+  }
   var m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
   if (m) {
     var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
@@ -288,7 +287,6 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
       + '<td style="font-family:var(--mono);font-size:10px;">' + esc(it.jan_code || '—') + '</td>'
       + '<td style="font-size:11px;">' + esc(it.product_name) + '</td>'
       + '<td style="font-family:var(--mono);text-align:right;">' + it.planned_qty + '</td>'
-      + '<td style="font-family:var(--mono);font-size:10px;">' + esc(it.lot_no || '—') + '</td>'
       + '<td style="font-family:var(--mono);font-size:10px;">' + (it.expiry_date ? fmtDate(it.expiry_date) : '—') + '</td>'
       + '</tr>';
   }).join('');
@@ -304,7 +302,7 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
     ${errHtml}
     ${validItems.length > 0 ? `
     <div class="tw"><table>
-      <thead><tr><th>No</th><th>JAN</th><th>商品名</th><th style="text-align:right;">数量</th><th>ロット</th><th>期限</th></tr></thead>
+      <thead><tr><th>No</th><th>JAN</th><th>商品名</th><th style="text-align:right;">数量</th><th>期限</th></tr></thead>
       <tbody>${previewRows}</tbody>
     </table></div>
     ${moreNote}
@@ -336,7 +334,6 @@ async function ipRegister() {
       return {
         product_id: it.product_id,
         planned_qty: it.planned_qty,
-        lot_no: it.lot_no || null,
         expiry_date: it.expiry_date || null,
       };
     });
