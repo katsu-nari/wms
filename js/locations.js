@@ -347,6 +347,7 @@ RENDER_FNS['location-detail'] = async function renderLocationDetail() {
   var toolBtns = '<button class="btn btn-g btn-sm" onclick="locShowQrModal(\'' + esc(loc.code) + '\')">QR</button>';
   if (isOperator()) {
     toolBtns += ' <button class="btn btn-g btn-sm" onclick="openLocationModal(\'' + loc.id + '\')">編集</button>';
+    toolBtns += ' <button class="btn btn-g btn-sm" onclick="if(typeof icStartFromLocation===\'function\')icStartFromLocation(\'' + loc.id + '\')">棚卸</button>';
   }
 
   var rows = inv.length
