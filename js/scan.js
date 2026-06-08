@@ -306,6 +306,16 @@ async function onScanResult(code, scanResult) {
   var isQR = !!(fmt && (fmt.format === 0 || fmt.formatName === 'QR_CODE'));
 
   var resultEl = document.getElementById('scan-result-area');
+
+  if (isQR) {
+    var handled = await _handleStructuredQr(code, resultEl);
+    if (handled) {
+      _flashSuccess(null);
+      addScanHistory(code, null);
+      return;
+    }
+  }
+
   if (resultEl) {
     resultEl.innerHTML = '<div class="card card-body" style="text-align:center;padding:20px;color:var(--text2);font-size:12px;"><div style="display:inline-block;width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:6px;vertical-align:middle;"></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>商品検索中…</div>';
   }
@@ -315,11 +325,6 @@ async function onScanResult(code, scanResult) {
 
   if (!product) {
     if (isQR) {
-      var handled = await _handleStructuredQr(code, resultEl);
-      if (handled) {
-        addScanHistory(code, null);
-        return;
-      }
       _showQrModal(code);
       addScanHistory(code, null);
       if (resultEl) resultEl.innerHTML = '';

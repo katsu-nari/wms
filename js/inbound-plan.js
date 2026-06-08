@@ -162,11 +162,6 @@ async function ipValidateAndPreview(dataRows) {
   var errors = [];
   var validItems = [];
 
-  var { data: products } = await sb.from('products')
-    .select('id, sku, name, jan_code')
-    .is('deleted_at', null);
-  products = products || [];
-
   var { data: clients } = await sb.from('clients')
     .select('id, code, name')
     .eq('is_active', true);
@@ -176,10 +171,12 @@ async function ipValidateAndPreview(dataRows) {
   var clientId = null;
   var clientName = '';
 
+  var rpcItems = [];
+  var rowMeta = [];
+
   for (var i = 0; i < dataRows.length; i++) {
     var row = dataRows[i];
     var rowNum = i + 2;
-    var rowErrors = [];
 
     var dateVal = row[0];
     var clientCode = String(row[1] || '').trim();
@@ -190,15 +187,14 @@ async function ipValidateAndPreview(dataRows) {
     var lotNo = String(row[6] || '').trim();
     var expiryVal = row[7];
 
-    // Date check
     var parsedDate = ipParseDate(dateVal);
     if (!parsedDate && i === 0) {
-      rowErrors.push('入荷予定日が不正です');
+      errors.push({ row: rowNum, messages: ['入荷予定日が不正です'] });
+      continue;
     } else if (parsedDate && !plannedDate) {
       plannedDate = parsedDate;
     }
 
-    // Client check (use first row's client)
     if (clientCode && !clientId) {
       var foundClient = clients.find(function(c) { return c.code === clientCode; });
       if (foundClient) {
@@ -207,41 +203,46 @@ async function ipValidateAndPreview(dataRows) {
       }
     }
 
-    // Product check
-    var product = null;
-    if (janCode) {
-      product = products.find(function(p) { return p.jan_code === janCode; });
-    }
-    if (!product && productCode) {
-      product = products.find(function(p) { return p.sku === productCode; });
-    }
-    if (!product) {
-      rowErrors.push('商品マスタ未登録 (JAN: ' + (janCode || '—') + ', コード: ' + (productCode || '—') + ')');
-    }
-
-    // Quantity check
-    var parsedQty = Number(qty);
-    if (!qty && qty !== 0) {
-      rowErrors.push('数量が未入力です');
-    } else if (isNaN(parsedQty) || parsedQty <= 0 || !Number.isInteger(parsedQty)) {
-      rowErrors.push('数量が不正です: ' + qty);
-    }
-
-    // Expiry parse
     var parsedExpiry = expiryVal ? ipParseDate(expiryVal) : null;
 
-    if (rowErrors.length > 0) {
-      errors.push({ row: rowNum, messages: rowErrors });
-    } else {
-      validItems.push({
-        product_id: product.id,
-        jan_code: product.jan_code || janCode,
-        sku: product.sku || productCode,
-        product_name: product.name || productName,
-        planned_qty: parsedQty,
-        lot_no: lotNo || null,
-        expiry_date: parsedExpiry || null,
-      });
+    rpcItems.push({
+      jan_code: janCode,
+      sku: productCode,
+      planned_qty: qty,
+      lot_no: lotNo || null,
+      expiry_date: parsedExpiry || null,
+    });
+    rowMeta.push({ rowNum: rowNum, productName: productName });
+  }
+
+  if (rpcItems.length > 0) {
+    var { data: validated, error: rpcErr } = await sb.rpc('fn_validate_inbound_items', {
+      p_items: rpcItems,
+    });
+
+    if (rpcErr) {
+      toast('商品照合エラー: ' + rpcErr.message, 'error');
+      return;
+    }
+
+    for (var j = 0; j < validated.length; j++) {
+      var v = validated[j];
+      var meta = rowMeta[j];
+      var itemErrors = v.errors || [];
+
+      if (itemErrors.length > 0) {
+        errors.push({ row: meta.rowNum, messages: itemErrors });
+      } else {
+        validItems.push({
+          product_id: v.product_id,
+          jan_code: v.product_jan || rpcItems[j].jan_code,
+          sku: v.product_sku || rpcItems[j].sku,
+          product_name: v.product_name || meta.productName,
+          planned_qty: v.planned_qty,
+          lot_no: rpcItems[j].lot_no,
+          expiry_date: rpcItems[j].expiry_date,
+        });
+      }
     }
   }
 
@@ -321,19 +322,7 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
   openModal('Excel取込プレビュー', body, footer, true);
 }
 
-// ---------- Plan No Generation ----------
-
-async function ipGeneratePlanNo(plannedDate) {
-  var date = plannedDate || new Date().toISOString().slice(0, 10);
-  var { data, error } = await sb.rpc('fn_generate_plan_no', {
-    p_document_type: 'IP',
-    p_date: date,
-  });
-  if (error) throw error;
-  return data;
-}
-
-// ---------- Register ----------
+// ---------- Register (Atomic RPC) ----------
 
 async function ipRegister() {
   var pending = window._ipPendingImport;
@@ -343,38 +332,32 @@ async function ipRegister() {
   if (btn) { btn.disabled = true; btn.textContent = '登録中...'; }
 
   try {
-    var planNo = await ipGeneratePlanNo(pending.plannedDate);
-
-    var { data: plan, error: planErr } = await sb.from('inbound_plans').insert({
-      plan_no: planNo,
-      planned_date: pending.plannedDate,
-      client_id: pending.clientId || null,
-      status: 'planned',
-      created_by: App.user ? App.user.id : null,
-    }).select().single();
-
-    if (planErr) throw planErr;
-
-    var itemRows = pending.items.map(function(it) {
+    var rpcItems = pending.items.map(function(it) {
       return {
-        inbound_plan_id: plan.id,
         product_id: it.product_id,
         planned_qty: it.planned_qty,
-        received_qty: 0,
-        lot_no: it.lot_no,
-        expiry_date: it.expiry_date,
+        lot_no: it.lot_no || null,
+        expiry_date: it.expiry_date || null,
       };
     });
 
-    var { error: itemErr } = await sb.from('inbound_plan_items').insert(itemRows);
-    if (itemErr) throw itemErr;
+    var { data, error } = await sb.rpc('fn_create_inbound_plan', {
+      p_planned_date: pending.plannedDate,
+      p_client_id: pending.clientId || null,
+      p_items: rpcItems,
+    });
+
+    if (error) throw error;
+
+    var planNo = data.plan_no;
+    var planId = data.id;
 
     closeModal();
     toast('入荷予定 ' + planNo + ' を登録しました');
     window._ipPendingImport = null;
     await loadInboundPlans();
 
-    ipShowPrintConfirm(plan.id, planNo);
+    ipShowPrintConfirm(planId, planNo);
   } catch (e) {
     toast('登録失敗: ' + (e.message || JSON.stringify(e)), 'error');
     if (btn) { btn.disabled = false; btn.textContent = '登録実行'; }
@@ -388,6 +371,8 @@ function ipShowPrintConfirm(planId, planNo) {
 }
 
 // ---------- PDF Output ----------
+
+var _isGeneratingPdf = false;
 
 function _generateBarcodeDataUrl(text) {
   var canvas = document.createElement('canvas');
@@ -409,7 +394,7 @@ function _generateBarcodeDataUrl(text) {
 
 function _generateQrDataUrl(text) {
   try {
-    var qr = qrcode(0, 'M');
+    var qr = qrcode(0, 'H');
     qr.addData(text);
     qr.make();
     var size = qr.getModuleCount();
@@ -436,6 +421,13 @@ function _generateQrDataUrl(text) {
 }
 
 async function ipPrintPdf(planId) {
+  if (_isGeneratingPdf) { toast('PDF生成中です', 'error'); return; }
+  _isGeneratingPdf = true;
+
+  var pdfBtns = document.querySelectorAll('[onclick*="ipPrintPdf"]');
+  pdfBtns.forEach(function(b) { b.disabled = true; b.dataset.origText = b.innerHTML; b.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;"></span> 生成中...'; });
+
+  try {
   var res = await sb.from('inbound_plans')
     .select('*, clients(name), inbound_plan_items(*, products(sku, name, jan_code))')
     .eq('id', planId)
@@ -533,4 +525,10 @@ async function ipPrintPdf(planId) {
 
   doc.save('inspection_' + (plan.plan_no || 'list') + '.pdf');
   toast('検品リストPDFを出力しました');
+
+  } finally {
+    _isGeneratingPdf = false;
+    var pdfBtns2 = document.querySelectorAll('[onclick*="ipPrintPdf"]');
+    pdfBtns2.forEach(function(b) { b.disabled = false; if (b.dataset.origText) b.innerHTML = b.dataset.origText; });
+  }
 }
