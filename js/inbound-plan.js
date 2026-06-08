@@ -160,7 +160,10 @@ async function ipHandleFile(input) {
 
 async function ipValidateAndPreview(dataRows) {
   var errors = [];
+  var warnings = [];
   var validItems = [];
+  var today = new Date().toISOString().slice(0, 10);
+  var today30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
   var { data: clients } = await sb.from('clients')
     .select('id, code, name')
@@ -170,13 +173,16 @@ async function ipValidateAndPreview(dataRows) {
   var plannedDate = null;
   var clientId = null;
   var clientName = '';
+  var clientCodes = {};
 
   var rpcItems = [];
-  var rowMeta = [];
+  var rpcMeta = [];
+  var janRowMap = {};
 
   for (var i = 0; i < dataRows.length; i++) {
     var row = dataRows[i];
     var rowNum = i + 2;
+    var rowErrors = [];
 
     var dateVal = row[0];
     var clientCode = String(row[1] || '').trim();
@@ -193,22 +199,66 @@ async function ipValidateAndPreview(dataRows) {
       plannedDate = parsedDate;
     }
 
-    if (clientCode && !clientId) {
-      var foundClient = clients.find(function(c) { return c.code === clientCode; });
-      if (foundClient) {
-        clientId = foundClient.id;
-        clientName = foundClient.name;
+    if (clientCode) {
+      clientCodes[clientCode] = true;
+      if (!clientId) {
+        var foundClient = clients.find(function(c) { return c.code === clientCode; });
+        if (foundClient) {
+          clientId = foundClient.id;
+          clientName = foundClient.name;
+        }
       }
+    }
+
+    if (!janCode || !/^\d+$/.test(janCode) || (janCode.length !== 8 && janCode.length !== 13)) {
+      rowErrors.push('JANコード形式が不正です');
+    }
+
+    var parsedQty = Number(qty);
+    if (!qty && qty !== 0) {
+      rowErrors.push('数量が未入力です');
+    } else if (isNaN(parsedQty) || parsedQty <= 0 || !Number.isInteger(parsedQty)) {
+      rowErrors.push('数量が不正です');
     }
 
     var parsedExpiry = expiryVal ? ipParseDate(expiryVal) : null;
 
+    if (parsedExpiry && parsedExpiry < today) {
+      rowErrors.push('期限切れ商品のため登録できません');
+    }
+
+    if (rowErrors.length > 0) {
+      errors.push({ row: rowNum, messages: rowErrors });
+      continue;
+    }
+
+    if (!janRowMap[janCode]) janRowMap[janCode] = [];
+    janRowMap[janCode].push(rowNum);
+
     rpcItems.push({
       jan_code: janCode,
-      planned_qty: qty,
+      planned_qty: parsedQty,
       expiry_date: parsedExpiry || null,
     });
-    rowMeta.push({ rowNum: rowNum, productName: productName });
+    rpcMeta.push({
+      rowNum: rowNum,
+      productName: productName,
+      expiryDate: parsedExpiry,
+      qty: parsedQty,
+      janCode: janCode,
+    });
+  }
+
+  var ckeys = Object.keys(clientCodes);
+  if (ckeys.length > 1) {
+    errors.push({ messages: ['荷主コードが複数存在します: ' + ckeys.join(', ') + '。1ファイル1荷主で登録してください'] });
+  }
+
+  if (!plannedDate) {
+    plannedDate = today;
+  }
+  if (plannedDate < today) {
+    warnings.push({ messages: ['入荷予定日 ' + plannedDate + ' は本日より前の日付です'] });
   }
 
   if (rpcItems.length > 0) {
@@ -223,28 +273,54 @@ async function ipValidateAndPreview(dataRows) {
 
     for (var j = 0; j < validated.length; j++) {
       var v = validated[j];
-      var meta = rowMeta[j];
+      var meta = rpcMeta[j];
       var itemErrors = v.errors || [];
 
       if (itemErrors.length > 0) {
         errors.push({ row: meta.rowNum, messages: itemErrors });
-      } else {
-        validItems.push({
-          product_id: v.product_id,
-          jan_code: v.product_jan || rpcItems[j].jan_code,
-          product_name: v.product_name || meta.productName,
-          planned_qty: v.planned_qty,
-          expiry_date: rpcItems[j].expiry_date,
+        continue;
+      }
+
+      if (meta.productName && v.product_name && meta.productName !== v.product_name) {
+        warnings.push({
+          row: meta.rowNum,
+          messages: ['商品名が一致しません (Excel: ' + meta.productName + ' / マスタ: ' + v.product_name + ')'],
         });
       }
+
+      if (meta.expiryDate && meta.expiryDate >= today && meta.expiryDate <= today30) {
+        warnings.push({
+          row: meta.rowNum,
+          messages: ['賞味期限まで30日以内です (' + meta.expiryDate + ')'],
+        });
+      }
+
+      if (meta.qty > 10000) {
+        warnings.push({
+          row: meta.rowNum,
+          messages: ['数量が非常に大きいです (' + meta.qty.toLocaleString() + ')'],
+        });
+      }
+
+      validItems.push({
+        product_id: v.product_id,
+        jan_code: v.product_jan || meta.janCode,
+        product_name: v.product_name || meta.productName,
+        planned_qty: v.planned_qty,
+        expiry_date: meta.expiryDate,
+      });
     }
   }
 
-  if (!plannedDate) {
-    plannedDate = new Date().toISOString().slice(0, 10);
+  for (var jan in janRowMap) {
+    if (janRowMap[jan].length > 1) {
+      warnings.push({
+        messages: ['同一JANが複数行存在します (JAN: ' + jan + ' → ' + janRowMap[jan].join('行目, ') + '行目)'],
+      });
+    }
   }
 
-  ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientName);
+  ipShowPreviewModal(validItems, errors, warnings, plannedDate, clientId, clientName);
 }
 
 function ipParseDate(val) {
@@ -270,13 +346,35 @@ function ipParseDate(val) {
   return null;
 }
 
-function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientName) {
+function ipShowPreviewModal(validItems, errors, warnings, plannedDate, clientId, clientName) {
+  var summaryHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">';
+  if (errors.length > 0) {
+    summaryHtml += '<span class="badge br" style="font-size:11px;padding:4px 10px;">エラー: ' + errors.length + '件</span>';
+  }
+  if (warnings.length > 0) {
+    summaryHtml += '<span class="badge by" style="font-size:11px;padding:4px 10px;">警告: ' + warnings.length + '件</span>';
+  }
+  summaryHtml += '<span class="badge bb" style="font-size:11px;padding:4px 10px;">登録対象: ' + validItems.length + '件</span>';
+  summaryHtml += '</div>';
+
   var errHtml = '';
   if (errors.length > 0) {
     errHtml = '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(200,40,40,.06);border:1px solid rgba(200,40,40,.18);border-radius:6px;">'
-      + '<div style="font-size:12px;font-weight:500;color:var(--red);margin-bottom:6px;">エラー (' + errors.length + '行)</div>'
+      + '<div style="font-size:12px;font-weight:500;color:var(--red);margin-bottom:6px;">エラー（登録不可）</div>'
       + errors.map(function(e) {
-          return '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;"><strong>' + e.row + '行目:</strong> ' + e.messages.map(esc).join(', ') + '</div>';
+          var prefix = e.row ? '<strong>' + e.row + '行目:</strong> ' : '';
+          return '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">' + prefix + e.messages.map(esc).join(', ') + '</div>';
+        }).join('')
+      + '</div>';
+  }
+
+  var warnHtml = '';
+  if (warnings.length > 0) {
+    warnHtml = '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(181,138,0,.06);border:1px solid rgba(181,138,0,.18);border-radius:6px;">'
+      + '<div style="font-size:12px;font-weight:500;color:var(--yellow);margin-bottom:6px;">警告（確認してください）</div>'
+      + warnings.map(function(w) {
+          var prefix = w.row ? '<strong>' + w.row + '行目:</strong> ' : '';
+          return '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">' + prefix + w.messages.map(esc).join(', ') + '</div>';
         }).join('')
       + '</div>';
   }
@@ -297,9 +395,11 @@ function ipShowPreviewModal(validItems, errors, plannedDate, clientId, clientNam
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px;">
       <div><span style="color:var(--text2);">入荷予定日:</span><br><strong>${esc(plannedDate)}</strong></div>
       <div><span style="color:var(--text2);">荷主:</span><br><strong>${esc(clientName || '未指定')}</strong></div>
-      <div><span style="color:var(--text2);">有効行:</span><br><strong>${validItems.length} 件</strong></div>
+      <div><span style="color:var(--text2);">取込行数:</span><br><strong>${validItems.length + errors.length} 件</strong></div>
     </div>
+    ${summaryHtml}
     ${errHtml}
+    ${warnHtml}
     ${validItems.length > 0 ? `
     <div class="tw"><table>
       <thead><tr><th>No</th><th>JAN</th><th>商品名</th><th style="text-align:right;">数量</th><th>期限</th></tr></thead>
