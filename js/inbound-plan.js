@@ -5,18 +5,21 @@
 
 let _ipPlans = [];
 let _ipTabFilter = 'all';
+let _ipSearchQuery = '';
 
 // ---------- Page Render ----------
 
 RENDER_FNS['inbound-plan'] = async function renderInboundPlan() {
   const el = document.getElementById('page-inbound-plan');
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:8px;flex-wrap:wrap;">
-      <div class="tabs" id="ipTabs" style="max-width:420px;">
+    <div id="ipKpiArea" style="margin-bottom:12px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+      <div class="tabs" id="ipTabs" style="max-width:480px;">
         <div class="tab active" onclick="setIpTab('all',this)">全て</div>
         <div class="tab" onclick="setIpTab('planned',this)">予定</div>
-        <div class="tab" onclick="setIpTab('receiving',this)">入荷中</div>
+        <div class="tab" onclick="setIpTab('receiving',this)">検品中</div>
         <div class="tab" onclick="setIpTab('completed',this)">完了</div>
+        <div class="tab" onclick="setIpTab('cancelled',this)">取消</div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-g" onclick="ipDownloadTemplate()">
@@ -32,14 +35,26 @@ RENDER_FNS['inbound-plan'] = async function renderInboundPlan() {
         ` : ''}
       </div>
     </div>
+    <div style="margin-bottom:10px;">
+      <div class="sbar" style="max-width:360px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="ipSearchInput" placeholder="予定番号・荷主で検索..." value="${esc(_ipSearchQuery)}" oninput="ipOnSearch(this.value)">
+      </div>
+    </div>
     <div class="card"><div class="tw"><table>
       <thead><tr><th>予定番号</th><th>入荷予定日</th><th class="hm">荷主</th><th>明細数</th><th>予定数</th><th class="hm">実績数</th><th>状態</th><th>操作</th></tr></thead>
       <tbody id="ipTb"></tbody>
     </table></div></div>
   `;
   _ipTabFilter = 'all';
+  _ipSearchQuery = '';
   await loadInboundPlans();
 };
+
+function ipOnSearch(val) {
+  _ipSearchQuery = (val || '').trim().toLowerCase();
+  renderIpTable();
+}
 
 function setIpTab(tab, tabEl) {
   _ipTabFilter = tab;
@@ -53,41 +68,68 @@ async function loadInboundPlans() {
     .select('*, clients(name), inbound_plan_items(id, planned_qty, received_qty)')
     .order('created_at', { ascending: false });
   _ipPlans = data || [];
+  renderIpKpi();
   renderIpTable();
 }
 
+function renderIpKpi() {
+  var el = document.getElementById('ipKpiArea');
+  if (!el) return;
+  var today = new Date().toISOString().slice(0, 10);
+  var todayPlanned = 0, todayReceiving = 0, todayCompleted = 0, incomplete = 0;
+  _ipPlans.forEach(function(p) {
+    var isToday = p.planned_date === today;
+    if (p.status === 'planned') { if (isToday) todayPlanned++; incomplete++; }
+    if (p.status === 'receiving') { if (isToday) todayReceiving++; incomplete++; }
+    if (p.status === 'completed' && isToday) todayCompleted++;
+  });
+  el.innerHTML = '<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">'
+    + '<div class="kpi b"><div class="kpi-lbl">本日予定</div><div class="kpi-val">' + todayPlanned + '</div></div>'
+    + '<div class="kpi y"><div class="kpi-lbl">検品中</div><div class="kpi-val">' + todayReceiving + '</div></div>'
+    + '<div class="kpi g"><div class="kpi-lbl">本日完了</div><div class="kpi-val">' + todayCompleted + '</div></div>'
+    + '<div class="kpi r"><div class="kpi-lbl">未完了</div><div class="kpi-val">' + incomplete + '</div></div>'
+    + '</div>';
+}
+
 function renderIpTable() {
-  let filtered = _ipPlans;
+  var filtered = _ipPlans;
   if (_ipTabFilter !== 'all') {
-    filtered = filtered.filter(p => p.status === _ipTabFilter);
+    filtered = filtered.filter(function(p) { return p.status === _ipTabFilter; });
   }
-  const tb = document.getElementById('ipTb');
+  if (_ipSearchQuery) {
+    filtered = filtered.filter(function(p) {
+      var cn = (p.clients && p.clients.name) || '';
+      return (p.plan_no || '').toLowerCase().indexOf(_ipSearchQuery) >= 0
+        || cn.toLowerCase().indexOf(_ipSearchQuery) >= 0;
+    });
+  }
+  var tb = document.getElementById('ipTb');
   if (!tb) return;
 
-  const statusLabels = { planned: '予定', receiving: '入荷中', completed: '完了' };
-  const statusCls = { planned: 'bb', receiving: 'by', completed: 'bg' };
+  var statusLabels = { planned: '予定', receiving: '検品中', completed: '完了', cancelled: '取消' };
+  var statusCls = { planned: 'bb', receiving: 'by', completed: 'bg', cancelled: 'bgr' };
 
   tb.innerHTML = filtered.length
-    ? filtered.map(p => {
-        const items = p.inbound_plan_items || [];
-        const totalPlanned = items.reduce((s, it) => s + (it.planned_qty || 0), 0);
-        const totalReceived = items.reduce((s, it) => s + (it.received_qty || 0), 0);
-        const clientName = p.clients?.name || '—';
-        const cls = statusCls[p.status] || 'bgr';
-        const lbl = statusLabels[p.status] || p.status;
-        return `<tr>
-          <td style="font-family:var(--mono);font-size:11px;">${esc(p.plan_no)}</td>
-          <td style="font-family:var(--mono);font-size:11px;">${fmtDate(p.planned_date)}</td>
-          <td class="hm">${esc(clientName)}</td>
-          <td style="font-family:var(--mono);text-align:center;">${items.length}</td>
-          <td style="font-family:var(--mono);">${totalPlanned.toLocaleString()}</td>
-          <td class="hm" style="font-family:var(--mono);">${totalReceived.toLocaleString()}</td>
-          <td><span class="badge ${cls}">${lbl}</span></td>
-          <td>
-            <button class="btn btn-g btn-sm" onclick="ipGoDetail('${p.id}')">詳細</button>
-            ${isOperator() ? `<button class="btn btn-p btn-sm" onclick="ipPrintPdf('${p.id}')">PDF</button>` : ''}
-          </td>
-        </tr>`;
+    ? filtered.map(function(p) {
+        var items = p.inbound_plan_items || [];
+        var totalPlanned = items.reduce(function(s, it) { return s + (it.planned_qty || 0); }, 0);
+        var totalReceived = items.reduce(function(s, it) { return s + (it.received_qty || 0); }, 0);
+        var clientName = (p.clients && p.clients.name) || '—';
+        var cls = statusCls[p.status] || 'bgr';
+        var lbl = statusLabels[p.status] || p.status;
+        return '<tr>'
+          + '<td style="font-family:var(--mono);font-size:11px;">' + esc(p.plan_no) + '</td>'
+          + '<td style="font-family:var(--mono);font-size:11px;">' + fmtDate(p.planned_date) + '</td>'
+          + '<td class="hm">' + esc(clientName) + '</td>'
+          + '<td style="font-family:var(--mono);text-align:center;">' + items.length + '</td>'
+          + '<td style="font-family:var(--mono);">' + totalPlanned.toLocaleString() + '</td>'
+          + '<td class="hm" style="font-family:var(--mono);">' + totalReceived.toLocaleString() + '</td>'
+          + '<td><span class="badge ' + cls + '">' + lbl + '</span></td>'
+          + '<td>'
+            + '<button class="btn btn-g btn-sm" onclick="ipGoDetail(\'' + p.id + '\')">詳細</button>'
+            + (isOperator() ? ' <button class="btn btn-p btn-sm" onclick="ipPrintPdf(\'' + p.id + '\')">PDF</button>' : '')
+          + '</td>'
+        + '</tr>';
       }).join('')
     : '<tr><td colspan="8" class="empty-state">入荷予定データがありません</td></tr>';
 }
