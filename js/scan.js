@@ -401,6 +401,13 @@ async function _handleStructuredQr(content, resultEl) {
       }
       return true;
     }
+
+    if (obj && obj.type === 'location' && obj.location_code) {
+      if (typeof locGoDetailByCode === 'function') {
+        locGoDetailByCode(obj.location_code);
+      }
+      return true;
+    }
   } catch (e) {}
   return false;
 }

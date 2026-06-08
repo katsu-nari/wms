@@ -17,7 +17,7 @@ RENDER_FNS.products = async function renderProducts() {
       </div>
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>SKU</th><th>商品名</th><th class="hm">JAN</th><th>単位</th><th class="hm">原単価</th><th class="hm">売単価</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
+      <thead><tr><th>SKU</th><th>商品名</th><th class="hm">JAN</th><th>単位</th><th class="hm">原単価</th><th class="hm">売単価</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th>在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
       <tbody id="prodTb"></tbody>
     </table></div></div>
   `;
@@ -25,10 +25,18 @@ RENDER_FNS.products = async function renderProducts() {
 };
 
 let _products = [];
+let _productStockMap = {};
 
 async function loadProducts() {
   const { data } = await sb.from('products').select('*').is('deleted_at', null).order('sku');
   _products = data || [];
+
+  const { data: inv } = await sb.from('inventory').select('product_id, qty').gt('qty', 0);
+  _productStockMap = {};
+  (inv || []).forEach(function(r) {
+    _productStockMap[r.product_id] = (_productStockMap[r.product_id] || 0) + r.qty;
+  });
+
   filterProducts();
 }
 
@@ -49,10 +57,11 @@ function filterProducts() {
         <td class="hm" style="font-family:var(--mono);">${p.sell_price != null ? Number(p.sell_price).toLocaleString() : '—'}</td>
         <td class="hm">${conditionLabel(p.storage_condition)}</td>
         <td class="hm" style="font-family:var(--mono);">${p.min_stock}</td>
+        <td style="font-family:var(--mono);text-align:right;"><a href="javascript:void(0)" onclick="event.stopPropagation();showProductInventory('${p.id}')" style="color:var(--accent);text-decoration:none;font-weight:500;">${_productStockMap[p.id] ? _productStockMap[p.id].toLocaleString() : '0'}</a></td>
         <td class="hm">${p.track_expiry ? '<span class="badge bg">有</span>' : '<span class="badge bgr">無</span>'}</td>
         ${isAdmin() ? `<td><button class="btn btn-g btn-sm" onclick="openProductModal('${p.id}')">編集</button></td>` : ''}
       </tr>`).join('')
-    : '<tr><td colspan="10" class="empty-state">商品が見つかりません</td></tr>';
+    : '<tr><td colspan="11" class="empty-state">商品が見つかりません</td></tr>';
 }
 
 function openProductModal(id) {
@@ -132,6 +141,37 @@ async function deleteProduct(id) {
   closeModal();
   toast('商品を削除しました');
   await loadProducts();
+}
+
+async function showProductInventory(productId) {
+  var p = _products.find(function(x) { return x.id === productId; });
+  var { data } = await sb.from('v_inventory_with_names')
+    .select('*')
+    .eq('product_id', productId)
+    .gt('qty', 0)
+    .order('location_code');
+
+  var inv = data || [];
+  var totalQty = inv.reduce(function(s, r) { return s + (r.qty || 0); }, 0);
+
+  var body = inv.length
+    ? '<div class="tw"><table>'
+      + '<thead><tr><th>ロケーション</th><th>ロット</th><th>期限</th><th style="text-align:right;">数量</th><th style="text-align:right;">引当</th></tr></thead>'
+      + '<tbody>' + inv.map(function(r) {
+          return '<tr onclick="closeModal();if(typeof locGoDetail===\'function\')locGoDetail(\'' + r.location_id + '\')" style="cursor:pointer;">'
+            + '<td style="font-family:var(--mono);font-size:11px;">' + esc(r.location_code) + '</td>'
+            + '<td style="font-family:var(--mono);font-size:11px;">' + (esc(r.lot_no) || '—') + '</td>'
+            + '<td style="font-size:11px;">' + (r.expiry ? fmtDate(r.expiry) : '—') + '</td>'
+            + '<td style="font-family:var(--mono);text-align:right;font-weight:700;">' + r.qty.toLocaleString() + '</td>'
+            + '<td style="font-family:var(--mono);text-align:right;">' + (r.locked_qty || 0) + '</td>'
+          + '</tr>';
+        }).join('') + '</tbody></table></div>'
+      + '<div style="text-align:right;margin-top:8px;font-size:12px;color:var(--text2);">合計: <strong>' + totalQty.toLocaleString() + '個</strong></div>'
+      + '<div style="margin-top:4px;font-size:10px;color:var(--text3);">行をクリックするとロケーション詳細へ</div>'
+    : '<div class="empty-state" style="padding:20px;"><p>在庫がありません</p></div>';
+
+  var title = (p ? esc(p.name) : '商品') + ' のロケーション別在庫';
+  openModal(title, body, '<button class="btn btn-g" onclick="closeModal()">閉じる</button>');
 }
 
 function exportProductsCSV() {

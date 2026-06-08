@@ -43,6 +43,7 @@ const PAGE_TITLES = {
   stocktake: '棚卸',
   products: '商品マスタ',
   locations: 'ロケーション管理',
+  'location-detail': 'ロケーション詳細',
   suppliers: '仕入先マスタ',
   clients: '荷主マスタ',
   reports: 'レポート / CSV',
