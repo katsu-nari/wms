@@ -1,11 +1,12 @@
 // =====================================================================
 // SUPEREX LogiStation - inbound-plan-detail.js
-// 入荷予定詳細: 検品・入庫確定・キャンセル
+// 入荷予定詳細: 検品・PC検品・入荷計上・キャンセル
 // =====================================================================
 
 var _ipdPlan = null;
 var _ipdScanMode = 'single';
 var _ipdScanner = null;
+var _ipdItemState = {};
 
 RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
   var el = document.getElementById('page-inbound-plan-detail');
@@ -42,8 +43,36 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
   var statusLabels = { planned: '予定', receiving: '検品中', completed: '完了', cancelled: '取消' };
   var statusCls = { planned: 'bb', receiving: 'by', completed: 'bg', cancelled: 'bgr' };
 
+  var isReceiving = plan.status === 'receiving' && isOperator();
+
+  if (isReceiving) {
+    _ipdItemState = {};
+    items.forEach(function(it) {
+      var recQty = it.received_qty || 0;
+      _ipdItemState[it.id] = {
+        checked: it.checked || recQty > 0,
+        received_qty: recQty,
+      };
+    });
+  }
+
+  var colSpan = isReceiving ? 7 : 6;
   var rows = items.map(function(it) {
     var p = it.products || {};
+    if (isReceiving) {
+      var st = _ipdItemState[it.id];
+      var variance = st.received_qty - it.planned_qty;
+      var varStyle = variance < 0 ? 'color:var(--red);' : variance > 0 ? 'color:var(--yellow);' : 'color:var(--green);';
+      return '<tr>'
+        + '<td style="text-align:center;width:36px;"><input type="checkbox" ' + (st.checked ? 'checked' : '') + ' data-item-id="' + it.id + '" data-planned="' + it.planned_qty + '" onchange="ipdOnCheckChange(this)"></td>'
+        + '<td style="font-family:var(--mono);font-size:10px;">' + esc(p.jan_code || '—') + '</td>'
+        + '<td style="font-size:11px;">' + esc(p.name || '—') + '</td>'
+        + '<td style="font-family:var(--mono);text-align:right;">' + it.planned_qty + '</td>'
+        + '<td style="width:80px;"><input type="number" class="fi" min="0" value="' + st.received_qty + '" data-item-id="' + it.id + '" data-planned="' + it.planned_qty + '" oninput="ipdOnQtyInput(this)" style="width:70px;font-family:var(--mono);text-align:right;padding:4px 6px;font-size:12px;"></td>'
+        + '<td style="font-family:var(--mono);text-align:right;' + varStyle + '" id="ipdVar_' + it.id + '">' + (variance >= 0 ? '+' : '') + variance + '</td>'
+        + '<td style="font-family:var(--mono);font-size:10px;">' + (it.expiry_date ? fmtDate(it.expiry_date) : '—') + '</td>'
+        + '</tr>';
+    }
     var variance = (it.received_qty || 0) - it.planned_qty;
     var varStyle = variance < 0 ? 'color:var(--red);' : variance > 0 ? 'color:var(--yellow);' : 'color:var(--green);';
     return '<tr>'
@@ -64,8 +93,9 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
         actionBtns += ' <button class="btn btn-d" onclick="ipdShowCancelModal()">キャンセル</button>';
       }
     } else if (plan.status === 'receiving') {
-      actionBtns = '<button class="btn btn-p" onclick="ipdOpenScanModal()">QR検品開始</button>'
-        + ' <button class="btn btn-g" onclick="ipdShowConfirmModal()">入庫確定</button>';
+      actionBtns = '<button class="btn btn-g" onclick="ipdCheckAll()">全チェック</button>'
+        + ' <button class="btn btn-p" onclick="ipdOpenScanModal()">QR検品</button>'
+        + ' <button class="btn btn-p" style="background:var(--green);border-color:var(--green);" onclick="ipdShowReceiveModal()">入荷計上</button>';
     }
   }
 
@@ -75,6 +105,30 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
       + ' <button class="btn btn-g btn-sm" onclick="ipShowQrModal(\'' + esc(plan.plan_no) + '\')">QR</button>'
       + ' <button class="btn btn-g btn-sm" onclick="ipShowBarcodeModal(\'' + esc(plan.plan_no) + '\')">バーコード</button>';
   }
+
+  var kpiHtml;
+  if (isReceiving) {
+    var checkedCount = items.filter(function(it) { var st = _ipdItemState[it.id]; return st && st.checked; }).length;
+    var varSkuCount = items.filter(function(it) { var st = _ipdItemState[it.id]; return st && st.received_qty !== it.planned_qty; }).length;
+    var totalVarQty = items.reduce(function(s, it) { var st = _ipdItemState[it.id]; return s + (st ? Math.abs(st.received_qty - it.planned_qty) : 0); }, 0);
+    kpiHtml = '<div class="kpi-grid" id="ipdReceivingKpi" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:12px;">'
+      + '<div class="kpi b"><div class="kpi-lbl">予定SKU</div><div class="kpi-val">' + totalSku + '</div></div>'
+      + '<div class="kpi g"><div class="kpi-lbl">検品完了</div><div class="kpi-val" id="ipdKpiChecked">' + checkedCount + '</div></div>'
+      + '<div class="kpi ' + (varSkuCount > 0 ? 'r' : 'g') + '"><div class="kpi-lbl">差異SKU</div><div class="kpi-val" id="ipdKpiVarSku">' + varSkuCount + '</div></div>'
+      + '<div class="kpi ' + (totalVarQty > 0 ? 'y' : 'g') + '"><div class="kpi-lbl">差異数量</div><div class="kpi-val" id="ipdKpiVarQty">' + totalVarQty + '</div></div>'
+    + '</div>';
+  } else {
+    kpiHtml = '<div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:12px;">'
+      + '<div class="kpi b"><div class="kpi-lbl">SKU</div><div class="kpi-val">' + totalSku + '</div></div>'
+      + '<div class="kpi y"><div class="kpi-lbl">予定数量</div><div class="kpi-val">' + totalPlanned.toLocaleString() + '</div></div>'
+      + '<div class="kpi g"><div class="kpi-lbl">実績数量</div><div class="kpi-val">' + totalReceived.toLocaleString() + '</div></div>'
+      + '<div class="kpi ' + (progress >= 100 ? 'g' : progress > 0 ? 'y' : 'b') + '"><div class="kpi-lbl">進捗</div><div class="kpi-val">' + progress + '%</div></div>'
+    + '</div>';
+  }
+
+  var theadHtml = isReceiving
+    ? '<thead><tr><th style="width:36px;">✓</th><th>JAN</th><th>商品名</th><th style="text-align:right;">予定数</th><th style="text-align:right;">実績数</th><th style="text-align:right;">差異</th><th>賞味期限</th></tr></thead>'
+    : '<thead><tr><th>JAN</th><th>商品名</th><th style="text-align:right;">予定数</th><th style="text-align:right;">実績数</th><th style="text-align:right;">差異</th><th>賞味期限</th></tr></thead>';
 
   el.innerHTML = '<div style="max-width:800px;margin:0 auto;">'
     + '<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
@@ -99,12 +153,7 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
       + '</div>'
     + '</div>'
 
-    + '<div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:12px;">'
-      + '<div class="kpi b"><div class="kpi-lbl">SKU</div><div class="kpi-val">' + totalSku + '</div></div>'
-      + '<div class="kpi y"><div class="kpi-lbl">予定数量</div><div class="kpi-val">' + totalPlanned.toLocaleString() + '</div></div>'
-      + '<div class="kpi g"><div class="kpi-lbl">実績数量</div><div class="kpi-val">' + totalReceived.toLocaleString() + '</div></div>'
-      + '<div class="kpi ' + (progress >= 100 ? 'g' : progress > 0 ? 'y' : 'b') + '"><div class="kpi-lbl">進捗</div><div class="kpi-val">' + progress + '%</div></div>'
-    + '</div>'
+    + kpiHtml
 
     + (actionBtns ? '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">' + actionBtns + '</div>' : '')
 
@@ -114,8 +163,8 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
       + '<div class="card-hd"><div class="card-title">明細一覧</div><div style="font-family:var(--mono);font-size:10px;color:var(--text2);">' + items.length + ' 件</div></div>'
       + '<div class="card-body" style="padding:0;">'
         + '<div class="tw"><table>'
-          + '<thead><tr><th>JAN</th><th>商品名</th><th style="text-align:right;">予定数</th><th style="text-align:right;">実績数</th><th style="text-align:right;">差異</th><th>賞味期限</th></tr></thead>'
-          + '<tbody>' + (rows || '<tr><td colspan="6" class="empty-state">明細なし</td></tr>') + '</tbody>'
+          + theadHtml
+          + '<tbody>' + (rows || '<tr><td colspan="' + colSpan + '" class="empty-state">明細なし</td></tr>') + '</tbody>'
         + '</table></div>'
       + '</div>'
     + '</div>'
@@ -260,28 +309,129 @@ async function ipdDoScan(janCode) {
   }
 }
 
-// ---------- 入庫確定 ----------
+// ---------- PC検品: チェックボックス・数量操作 ----------
 
-async function ipdShowConfirmModal() {
+function ipdOnCheckChange(cb) {
+  var itemId = cb.getAttribute('data-item-id');
+  var planned = parseInt(cb.getAttribute('data-planned')) || 0;
+  var st = _ipdItemState[itemId];
+  if (!st) return;
+
+  st.checked = cb.checked;
+
+  if (cb.checked && st.received_qty === 0) {
+    st.received_qty = planned;
+    var input = document.querySelector('input[type="number"][data-item-id="' + itemId + '"]');
+    if (input) input.value = planned;
+    var varEl = document.getElementById('ipdVar_' + itemId);
+    if (varEl) { varEl.textContent = '+0'; varEl.style.color = 'var(--green)'; }
+  }
+
+  ipdUpdateReceivingKpi();
+}
+
+function ipdOnQtyInput(input) {
+  var itemId = input.getAttribute('data-item-id');
+  var planned = parseInt(input.getAttribute('data-planned')) || 0;
+  var qty = parseInt(input.value) || 0;
+  if (qty < 0) qty = 0;
+
+  var st = _ipdItemState[itemId];
+  if (!st) return;
+  st.received_qty = qty;
+
+  if (qty > 0 && !st.checked) {
+    st.checked = true;
+    var cb = document.querySelector('input[type="checkbox"][data-item-id="' + itemId + '"]');
+    if (cb) cb.checked = true;
+  }
+
+  var variance = qty - planned;
+  var varEl = document.getElementById('ipdVar_' + itemId);
+  if (varEl) {
+    varEl.textContent = (variance >= 0 ? '+' : '') + variance;
+    varEl.style.color = variance < 0 ? 'var(--red)' : variance > 0 ? 'var(--yellow)' : 'var(--green)';
+  }
+
+  ipdUpdateReceivingKpi();
+}
+
+function ipdCheckAll() {
+  var items = (_ipdPlan && _ipdPlan.inbound_plan_items) || [];
+  items.forEach(function(it) {
+    var st = _ipdItemState[it.id];
+    if (!st || st.checked) return;
+    st.checked = true;
+    if (st.received_qty === 0) st.received_qty = it.planned_qty;
+    var cb = document.querySelector('input[type="checkbox"][data-item-id="' + it.id + '"]');
+    if (cb) cb.checked = true;
+    var input = document.querySelector('input[type="number"][data-item-id="' + it.id + '"]');
+    if (input) input.value = st.received_qty;
+    var variance = st.received_qty - it.planned_qty;
+    var varEl = document.getElementById('ipdVar_' + it.id);
+    if (varEl) {
+      varEl.textContent = (variance >= 0 ? '+' : '') + variance;
+      varEl.style.color = variance < 0 ? 'var(--red)' : variance > 0 ? 'var(--yellow)' : 'var(--green)';
+    }
+  });
+  ipdUpdateReceivingKpi();
+  toast('全アイテムをチェックしました');
+}
+
+function ipdUpdateReceivingKpi() {
+  var items = (_ipdPlan && _ipdPlan.inbound_plan_items) || [];
+  var checkedCount = 0, varSkuCount = 0, totalVarQty = 0;
+  items.forEach(function(it) {
+    var st = _ipdItemState[it.id];
+    if (!st) return;
+    if (st.checked) checkedCount++;
+    if (st.received_qty !== it.planned_qty) {
+      varSkuCount++;
+      totalVarQty += Math.abs(st.received_qty - it.planned_qty);
+    }
+  });
+  var el1 = document.getElementById('ipdKpiChecked');
+  var el2 = document.getElementById('ipdKpiVarSku');
+  var el3 = document.getElementById('ipdKpiVarQty');
+  if (el1) el1.textContent = checkedCount;
+  if (el2) el2.textContent = varSkuCount;
+  if (el3) el3.textContent = totalVarQty;
+}
+
+// ---------- 入荷計上モーダル ----------
+
+async function ipdShowReceiveModal() {
   if (!_ipdPlan || _ipdPlan.status !== 'receiving') return;
+
+  var items = _ipdPlan.inbound_plan_items || [];
+  var checkedItems = items.filter(function(it) { var st = _ipdItemState[it.id]; return st && st.checked; });
+
+  if (checkedItems.length === 0) {
+    toast('検品済みのアイテムがありません', 'error');
+    return;
+  }
 
   var { data: locs } = await sb.from('locations').select('id, code').eq('is_active', true).order('code');
   locs = locs || [];
   var locOpts = locs.map(function(l) { return '<option value="' + l.id + '">' + esc(l.code) + '</option>'; }).join('');
 
-  var items = _ipdPlan.inbound_plan_items || [];
-  var hasVariance = items.some(function(it) { return (it.received_qty || 0) !== it.planned_qty; });
+  var hasVariance = checkedItems.some(function(it) {
+    var st = _ipdItemState[it.id];
+    return st && st.received_qty !== it.planned_qty;
+  });
 
-  var varianceRows = '';
+  var varianceHtml = '';
   if (hasVariance) {
-    varianceRows = '<div style="margin-top:12px;"><div style="font-size:12px;font-weight:500;margin-bottom:6px;">差異がある明細</div>';
-    items.forEach(function(it) {
-      var diff = (it.received_qty || 0) - it.planned_qty;
+    varianceHtml = '<div style="margin-top:12px;"><div style="font-size:12px;font-weight:500;margin-bottom:6px;">差異がある明細</div>';
+    checkedItems.forEach(function(it) {
+      var st = _ipdItemState[it.id];
+      if (!st) return;
+      var diff = st.received_qty - it.planned_qty;
       if (diff === 0) return;
       var p = it.products || {};
-      varianceRows += '<div style="padding:8px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:12px;">'
+      varianceHtml += '<div style="padding:8px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:12px;">'
         + '<div style="font-weight:500;margin-bottom:4px;">' + esc(p.name || '—') + ' <span style="font-family:var(--mono);color:' + (diff < 0 ? 'var(--red)' : 'var(--yellow)') + ';">' + (diff >= 0 ? '+' : '') + diff + '</span></div>'
-        + '<select class="fs" data-item-id="' + it.id + '" style="font-size:12px;">'
+        + '<select class="fs" data-receive-item-id="' + it.id + '" style="font-size:12px;">'
           + '<option value="">差異理由を選択</option>'
           + '<option value="不足">不足</option>'
           + '<option value="過剰">過剰</option>'
@@ -291,59 +441,69 @@ async function ipdShowConfirmModal() {
         + '</select>'
       + '</div>';
     });
-    varianceRows += '</div>';
+    varianceHtml += '</div>';
   }
 
-  var body = '<div style="font-size:13px;margin-bottom:12px;">入庫を確定し、実績数量を在庫に計上します。</div>'
+  var summaryHtml = '<div style="font-size:12px;margin-bottom:8px;color:var(--text2);">検品済み: <strong>' + checkedItems.length + '</strong> / ' + items.length + ' SKU</div>';
+
+  var body = '<div style="font-size:13px;margin-bottom:12px;">検品済みアイテムを在庫に計上します。</div>'
+    + summaryHtml
     + '<div class="fl" style="margin-bottom:10px;">'
       + '<div class="flbl">入庫先ロケーション</div>'
-      + '<select class="fs" id="ipdConfirmLoc"><option value="">選択してください</option>' + locOpts + '</select>'
+      + '<select class="fs" id="ipdReceiveLoc"><option value="">選択してください</option>' + locOpts + '</select>'
     + '</div>'
-    + varianceRows;
+    + varianceHtml;
 
   var footer = '<button class="btn btn-g" onclick="closeModal()">キャンセル</button>'
-    + '<button class="btn btn-p" id="ipdConfirmBtn" onclick="ipdDoConfirm()">入庫確定</button>';
+    + '<button class="btn btn-p" id="ipdReceiveBtn" onclick="ipdDoReceive()">入荷計上</button>';
 
-  openModal('入庫確定', body, footer);
+  openModal('入荷計上', body, footer);
 }
 
-async function ipdDoConfirm() {
-  var locId = document.getElementById('ipdConfirmLoc').value;
+async function ipdDoReceive() {
+  var locId = document.getElementById('ipdReceiveLoc').value;
   if (!locId) { toast('入庫先ロケーションを選択してください', 'error'); return; }
 
-  var btn = document.getElementById('ipdConfirmBtn');
+  var btn = document.getElementById('ipdReceiveBtn');
   if (btn) { btn.disabled = true; btn.textContent = '処理中...'; }
 
-  var variances = [];
-  document.querySelectorAll('[data-item-id]').forEach(function(sel) {
-    var reason = sel.value;
-    if (reason) {
-      var itemId = sel.getAttribute('data-item-id');
-      var item = (_ipdPlan.inbound_plan_items || []).find(function(it) { return it.id === itemId; });
-      if (item) {
-        variances.push({
-          item_id: itemId,
-          variance_qty: (item.received_qty || 0) - item.planned_qty,
-          variance_reason: reason,
-        });
-      }
-    }
+  var items = (_ipdPlan && _ipdPlan.inbound_plan_items) || [];
+  var rpcItems = [];
+
+  items.forEach(function(it) {
+    var st = _ipdItemState[it.id];
+    if (!st || !st.checked) return;
+    var reason = '';
+    var sel = document.querySelector('[data-receive-item-id="' + it.id + '"]');
+    if (sel) reason = sel.value;
+    rpcItems.push({
+      item_id: it.id,
+      received_qty: st.received_qty,
+      checked: true,
+      variance_reason: reason || null,
+    });
   });
 
-  var { error } = await sb.rpc('fn_ip_confirm', {
+  if (rpcItems.length === 0) {
+    toast('計上対象のアイテムがありません', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '入荷計上'; }
+    return;
+  }
+
+  var { data, error } = await sb.rpc('fn_receive_inbound_plan', {
     p_plan_id: _ipdPlan.id,
     p_location_id: locId,
-    p_variances: variances,
+    p_items: rpcItems,
   });
 
   if (error) {
-    toast('入庫確定失敗: ' + error.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '入庫確定'; }
+    toast('入荷計上失敗: ' + error.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '入荷計上'; }
     return;
   }
 
   closeModal();
-  toast('入庫確定しました。在庫に計上されました。');
+  toast('入荷計上が完了しました。在庫に反映されました。');
   window._ipDetailId = _ipdPlan.id;
   await RENDER_FNS['inbound-plan-detail']();
 }

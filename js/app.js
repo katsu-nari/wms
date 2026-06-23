@@ -381,8 +381,18 @@ function scanBtnHtml(onclick) {
 }
 
 // ---------- Boot ----------
+const DEV_SKIP_LOGIN = true;
+
 (async function boot() {
   initPinInputs();
+
+  if (DEV_SKIP_LOGIN) {
+    App.user = { id: '00000000-0000-0000-0000-000000000000' };
+    App.profile = { display_name: 'DEV User', employee_number: 'DEV00', role: 'admin' };
+    App.role = 'admin';
+    showApp();
+    return;
+  }
 
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
