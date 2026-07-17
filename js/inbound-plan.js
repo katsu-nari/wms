@@ -64,9 +64,10 @@ function setIpTab(tab, tabEl) {
 }
 
 async function loadInboundPlans() {
-  const { data } = await sb.from('inbound_plans')
+  const { data, error } = await sb.from('inbound_plans')
     .select('*, clients(name), inbound_plan_items(id, planned_qty, received_qty)')
     .order('created_at', { ascending: false });
+  if (error) { toast('入荷予定の読み込みに失敗しました: ' + error.message, 'error'); }
   _ipPlans = data || [];
   renderIpKpi();
   renderIpTable();

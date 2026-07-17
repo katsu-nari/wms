@@ -45,6 +45,13 @@ RENDER_FNS.stocktake = async function renderStocktake() {
 
 // ---------- KPI ----------
 
+// 差異数量: 確定済みは確定値、実施中はスキャン済み明細のライブ差異
+// (count_qty - system_qty)。詳細画面のライブ計算と一致させる。
+function icItemVariance(it) {
+  if (it.count_qty === null || it.count_qty === undefined) return 0;
+  return (it.count_qty || 0) - (it.system_qty || 0);
+}
+
 function icRenderKpi() {
   var today = new Date().toISOString().slice(0, 10);
   var active = _icList.filter(function(c) { return c.status === 'counting'; }).length;
@@ -56,7 +63,8 @@ function icRenderKpi() {
   var varQty = 0;
   _icList.forEach(function(c) {
     (c.inventory_count_items || []).forEach(function(it) {
-      if (it.variance_qty && it.variance_qty !== 0) { varCount++; varQty += Math.abs(it.variance_qty); }
+      var v = icItemVariance(it);
+      if (v !== 0) { varCount++; varQty += Math.abs(v); }
     });
   });
 
@@ -73,9 +81,10 @@ function icRenderKpi() {
 // ---------- リスト ----------
 
 async function icLoadList() {
-  var { data } = await sb.from('inventory_counts')
-    .select('*, inventory_count_items(id, count_qty, variance_qty)')
+  var { data, error } = await sb.from('inventory_counts')
+    .select('*, inventory_count_items(id, system_qty, count_qty, variance_qty)')
     .order('created_at', { ascending: false });
+  if (error) { toast('棚卸一覧の読み込みに失敗しました: ' + error.message, 'error'); }
   _icList = data || [];
   icRenderList();
   icRenderKpi();
@@ -104,7 +113,7 @@ function icRenderList() {
         var items = c.inventory_count_items || [];
         var total = items.length;
         var counted = items.filter(function(it) { return it.count_qty !== null; }).length;
-        var variances = items.filter(function(it) { return it.variance_qty && it.variance_qty !== 0; }).length;
+        var variances = items.filter(function(it) { return icItemVariance(it) !== 0; }).length;
 
         return '<tr onclick="icGoDetail(\'' + c.id + '\')" style="cursor:pointer;">'
           + '<td style="font-family:var(--mono);font-size:11px;font-weight:500;">' + esc(c.count_no) + '</td>'
@@ -225,8 +234,8 @@ RENDER_FNS['stocktake-detail'] = async function renderStocktakeDetail() {
 
   var totalItems = items.length;
   var countedItems = items.filter(function(it) { return it.count_qty !== null; }).length;
-  var varItems = items.filter(function(it) { return it.variance_qty && it.variance_qty !== 0; }).length;
-  var varQty = items.reduce(function(s, it) { return s + Math.abs(it.variance_qty || 0); }, 0);
+  var varItems = items.filter(function(it) { return icItemVariance(it) !== 0; }).length;
+  var varQty = items.reduce(function(s, it) { return s + Math.abs(icItemVariance(it)); }, 0);
 
   var isCounting = count.status === 'counting';
 

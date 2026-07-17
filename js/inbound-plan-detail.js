@@ -66,6 +66,9 @@ RENDER_FNS['inbound-plan-detail'] = async function renderInboundPlanDetail() {
     } else if (plan.status === 'receiving') {
       actionBtns = '<button class="btn btn-p" onclick="ipdOpenScanModal()">QR検品開始</button>'
         + ' <button class="btn btn-g" onclick="ipdShowConfirmModal()">入庫確定</button>';
+      if (isAdmin()) {
+        actionBtns += ' <button class="btn btn-d" onclick="ipdShowCancelModal()">キャンセル</button>';
+      }
     }
   }
 

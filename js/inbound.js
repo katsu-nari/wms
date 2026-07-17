@@ -10,7 +10,6 @@ RENDER_FNS.inbound = async function renderInbound() {
       <div class="tabs" id="ibTabs" style="max-width:400px;">
         <div class="tab active" onclick="setIbTab('all',this)">全て</div>
         <div class="tab" onclick="setIbTab('pending',this)">受付待ち</div>
-        <div class="tab" onclick="setIbTab('received',this)">入荷済</div>
         <div class="tab" onclick="setIbTab('done',this)">完了</div>
       </div>
       ${isOperator() ? '<button class="btn btn-p" onclick="openInboundModal()">+ 入庫登録</button>' : ''}
@@ -36,9 +35,10 @@ function setIbTab(tab, tabEl) {
 }
 
 async function loadInbound() {
-  const { data } = await sb.from('inbound_orders')
+  const { data, error } = await sb.from('inbound_orders')
     .select('*, suppliers(name), inbound_items(id, product_id, planned_qty, received_qty, status)')
     .order('created_at', { ascending: false });
+  if (error) { toast('入庫一覧の読み込みに失敗しました: ' + error.message, 'error'); }
   _ibOrders = data || [];
   renderIbTable();
 }
@@ -321,7 +321,13 @@ async function execPutaway() {
       p_location: locId,
       p_qty: qty,
     });
-    if (error) { toast('棚入れ失敗: ' + error.message, 'error'); return; }
+    if (error) {
+      // 途中失敗でも成功済み行は確定しているため、画面を最新化してから通知
+      closeModal();
+      await loadInbound();
+      toast((ok > 0 ? ok + '行完了後に' : '') + '棚入れ失敗: ' + error.message, 'error');
+      return;
+    }
     ok++;
   }
   closeModal();

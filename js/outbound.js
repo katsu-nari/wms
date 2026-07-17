@@ -10,7 +10,6 @@ RENDER_FNS.outbound = async function renderOutbound() {
       <div class="tabs" id="obTabs" style="max-width:400px;">
         <div class="tab active" onclick="setObTab('all',this)">全て</div>
         <div class="tab" onclick="setObTab('pending',this)">指示待ち</div>
-        <div class="tab" onclick="setObTab('picking',this)">ピッキング</div>
         <div class="tab" onclick="setObTab('shipped',this)">出荷済</div>
       </div>
       ${isOperator() ? '<button class="btn btn-p" onclick="openOutboundModal()">+ 出庫登録</button>' : ''}
@@ -36,9 +35,10 @@ function setObTab(tab, tabEl) {
 }
 
 async function loadOutbound() {
-  const { data } = await sb.from('outbound_orders')
+  const { data, error } = await sb.from('outbound_orders')
     .select('*, outbound_items(id, product_id, planned_qty, picked_qty, status), clients(name)')
     .order('created_at', { ascending: false });
+  if (error) { toast('出庫一覧の読み込みに失敗しました: ' + error.message, 'error'); }
   _obOrders = data || [];
   renderObTable();
 }
@@ -273,7 +273,13 @@ async function execPick() {
       p_inventory_id: invId,
       p_qty: qty,
     });
-    if (error) { toast('ピッキング失敗: ' + error.message, 'error'); return; }
+    if (error) {
+      // 途中失敗でも成功済み行は確定しているため、画面を最新化してから通知
+      closeModal();
+      await loadOutbound();
+      toast((ok > 0 ? ok + '行完了後に' : '') + 'ピッキング失敗: ' + error.message, 'error');
+      return;
+    }
     ok++;
   }
   closeModal();
