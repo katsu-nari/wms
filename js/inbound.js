@@ -71,6 +71,8 @@ function renderIbTable() {
     : '<tr><td colspan="7" class="empty-state">入庫データがありません</td></tr>';
 }
 
+let _ibRowSeq = 0;
+
 async function openInboundModal() {
   const [supRes, prodRes] = await Promise.all([
     sb.from('suppliers').select('id, code, name').eq('is_active', true).order('code'),
@@ -78,23 +80,9 @@ async function openInboundModal() {
   ]);
   _ibSuppliers = supRes.data || [];
   _ibProducts = prodRes.data || [];
+  _ibRowSeq = 0;
 
   const supOpts = _ibSuppliers.map(s => `<option value="${s.id}">${esc(s.code)} - ${esc(s.name)}</option>`).join('');
-
-  let rowsHtml = '';
-  for (let i = 0; i < 10; i++) {
-    rowsHtml += `<tr id="ibRow${i}">
-      <td style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:4px 6px;">${i + 1}</td>
-      <td style="padding:4px 3px;"><div style="display:flex;gap:2px;align-items:center;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;flex:1;" placeholder="JAN" data-row="${i}" onchange="ibJanLookup(${i})"><button class="btn-scan" onclick="ibScanRow(${i})" style="padding:3px 5px;font-size:0;" title="スキャン"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg></button></div></td>
-      <td style="padding:4px 3px;"><span class="ib-pname" id="ibPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" class="ib-pid" id="ibPid${i}"></td>
-      <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
-      <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
-      <td style="padding:4px 3px;"><span class="ib-pack" id="ibPack${i}" style="font-family:var(--mono);font-size:11px;color:var(--text2);">—</span></td>
-      <td style="padding:4px 3px;"><input class="fi ib-case" id="ibCase${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
-      <td style="padding:4px 3px;"><input class="fi ib-piece" id="ibPiece${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
-      <td style="padding:4px 3px;font-family:var(--mono);font-size:11px;font-weight:700;" id="ibTotal${i}">—</td>
-    </tr>`;
-  }
 
   const body = `<div class="fg">
     <div class="fr">
@@ -106,20 +94,27 @@ async function openInboundModal() {
       <div class="fl"><div class="flbl">備考</div><input class="fi" id="ib_note" placeholder="メモ"></div>
     </div>
     <hr style="border-color:var(--border);">
-    <div class="flbl">明細行（最大10行）</div>
-    <div class="tw"><table style="min-width:700px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+      <div class="flbl" style="margin:0;">明細行</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-g btn-sm" onclick="ibDownloadTemplate()">テンプレート</button>
+        <label class="btn btn-g btn-sm" style="cursor:pointer;margin:0;">CSV / Excel取込<input type="file" accept=".csv,.xlsx,.xls" onchange="ibHandleImportFile(this)" style="display:none;"></label>
+        <button class="btn btn-g btn-sm" onclick="ibAddRow()">＋ 行追加</button>
+      </div>
+    </div>
+    <div class="tw"><table style="min-width:720px;">
       <thead><tr>
-        <th style="width:30px;">#</th>
+        <th style="width:34px;"></th>
         <th style="width:120px;">JANコード</th>
         <th>商品名</th>
         <th style="width:90px;">原単価</th>
         <th style="width:90px;">売単価</th>
-        <th style="width:50px;">入数</th>
+        <th style="width:60px;">入数</th>
         <th style="width:70px;">ケース数</th>
         <th style="width:70px;">ピース数</th>
         <th style="width:70px;">総ピース</th>
       </tr></thead>
-      <tbody>${rowsHtml}</tbody>
+      <tbody id="ibItemsBody"></tbody>
     </table></div>
   </div>`;
   const footer = `
@@ -127,16 +122,43 @@ async function openInboundModal() {
     <button class="btn btn-p" onclick="saveInbound()">登録</button>
   `;
   openModal('入庫登録', body, footer, true);
+
+  // 初期空行を5行表示
+  for (let k = 0; k < 5; k++) ibAddRow();
 }
 
-function ibScanRow(row) {
-  startScan((code) => {
-    const janInput = document.querySelector(`#ibRow${row} .ib-jan`);
-    if (janInput) {
-      janInput.value = code;
-      ibJanLookup(row);
-    }
-  });
+function ibRowInnerHtml(i) {
+  return `
+    <td style="padding:4px 6px;text-align:center;"><button class="btn btn-g btn-sm" style="padding:2px 7px;" onclick="ibRemoveRow(${i})" title="行を削除">×</button></td>
+    <td style="padding:4px 3px;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;width:110px;" placeholder="JAN" data-row="${i}" onchange="ibJanLookup(${i})"></td>
+    <td style="padding:4px 3px;"><span class="ib-pname" id="ibPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" class="ib-pid" id="ibPid${i}"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-pack" id="ibPack${i}" style="font-size:11px;padding:5px 6px;width:54px;" type="number" min="1" value="1" oninput="ibCalcTotal(${i})"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-case" id="ibCase${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-piece" id="ibPiece${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
+    <td style="padding:4px 3px;font-family:var(--mono);font-size:11px;font-weight:700;" id="ibTotal${i}">—</td>`;
+}
+
+function ibAddRow() {
+  const tbody = document.getElementById('ibItemsBody');
+  if (!tbody) return -1;
+  const i = _ibRowSeq++;
+  const tr = document.createElement('tr');
+  tr.id = 'ibRow' + i;
+  tr.className = 'ib-row';
+  tr.dataset.row = i;
+  tr.innerHTML = ibRowInnerHtml(i);
+  tbody.appendChild(tr);
+  return i;
+}
+
+function ibRemoveRow(i) {
+  const tr = document.getElementById('ibRow' + i);
+  if (tr) tr.remove();
+  // 全行が消えたら空行を1行残す
+  const tbody = document.getElementById('ibItemsBody');
+  if (tbody && tbody.querySelectorAll('.ib-row').length === 0) ibAddRow();
 }
 
 function ibJanLookup(row) {
@@ -150,10 +172,12 @@ function ibJanLookup(row) {
 
   if (!jan) {
     pnameEl.textContent = '—';
+    pnameEl.style.color = 'var(--text2)';
     pidEl.value = '';
     costEl.value = '';
     sellEl.value = '';
-    packEl.textContent = '—';
+    packEl.value = 1;
+    ibCalcTotal(row);
     return;
   }
 
@@ -164,13 +188,14 @@ function ibJanLookup(row) {
     pidEl.value = prod.id;
     if (prod.cost_price != null) costEl.value = prod.cost_price;
     if (prod.sell_price != null) sellEl.value = prod.sell_price;
-    packEl.textContent = prod.pack_size || 1;
+    // 商品マスタに入数があれば初期値として設定（手動で変更可）
+    packEl.value = prod.pack_size || 1;
     ibCalcTotal(row);
   } else {
+    // マスタ未登録でも手動で入数を入力できるよう入力欄は維持
     pnameEl.textContent = '該当なし';
     pnameEl.style.color = 'var(--red)';
     pidEl.value = '';
-    packEl.textContent = '—';
   }
 }
 
@@ -180,7 +205,7 @@ function ibCalcTotal(row) {
   const pieceEl = document.getElementById('ibPiece' + row);
   const totalEl = document.getElementById('ibTotal' + row);
 
-  const packSize = parseInt(packEl.textContent) || 1;
+  const packSize = parseInt(packEl.value) || 1;
   const caseQty = parseInt(caseEl.value) || 0;
   const pieceQty = parseInt(pieceEl.value) || 0;
   const total = caseQty * packSize + pieceQty;
@@ -195,14 +220,15 @@ async function saveInbound() {
   const note = document.getElementById('ib_note').value.trim() || null;
 
   const items = [];
-  for (let i = 0; i < 10; i++) {
+  const rowEls = document.querySelectorAll('#ibItemsBody .ib-row');
+  rowEls.forEach(function(tr) {
+    const i = tr.dataset.row;
     const pid = document.getElementById('ibPid' + i).value;
-    const packEl = document.getElementById('ibPack' + i);
     const caseQty = parseInt(document.getElementById('ibCase' + i).value) || 0;
     const pieceQty = parseInt(document.getElementById('ibPiece' + i).value) || 0;
-    const packSize = parseInt(packEl.textContent) || 1;
+    const packSize = parseInt(document.getElementById('ibPack' + i).value) || 1;
     const totalQty = caseQty * packSize + pieceQty;
-    if (!pid || totalQty <= 0) continue;
+    if (!pid || totalQty <= 0) return;
 
     const costVal = document.getElementById('ibCost' + i).value;
     const sellVal = document.getElementById('ibSell' + i).value;
@@ -216,8 +242,8 @@ async function saveInbound() {
       piece_qty: pieceQty,
       pack_size: packSize,
     });
-  }
-  if (!items.length) { toast('明細を1行以上入力してください', 'error'); return; }
+  });
+  if (!items.length) { toast('明細を1行以上入力してください（商品と数量が必要です）', 'error'); return; }
 
   const supplierName = supplierId
     ? (_ibSuppliers.find(s => s.id === supplierId)?.name || null)
@@ -243,6 +269,86 @@ async function saveInbound() {
   closeModal();
   toast('入庫を登録しました');
   await loadInbound();
+}
+
+// ---------- CSV / Excel 取込 ----------
+
+// 取込テンプレート（明細列）。数量はケース数×入数＋ピース数で総ピースを算出。
+// 入数が空欄の場合は商品マスタの入数を使用。
+function ibDownloadTemplate() {
+  const header = ['JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価'];
+  const sample = ['4901234567890', '5', '3', '24', '', ''];
+  const ws = XLSX.utils.aoa_to_sheet([header, sample]);
+  ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '入庫明細');
+  XLSX.writeFile(wb, '入庫明細テンプレート.xlsx');
+  toast('テンプレートをダウンロードしました');
+}
+
+async function ibHandleImportFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  input.value = '';
+  try {
+    const ab = await file.arrayBuffer();
+    const wb = XLSX.read(ab, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (rows.length < 2) { toast('データ行がありません', 'error'); return; }
+    const dataRows = rows.slice(1).filter(r => r.some(c => c !== '' && c != null));
+    if (!dataRows.length) { toast('データ行がありません', 'error'); return; }
+    ibImportRows(dataRows);
+  } catch (e) {
+    toast('ファイルの読み込みに失敗しました: ' + e.message, 'error');
+  }
+}
+
+function ibImportRows(dataRows) {
+  // 既存の空行（JAN未入力）を除去してから取込結果を追加
+  document.querySelectorAll('#ibItemsBody .ib-row').forEach(function(tr) {
+    const i = tr.dataset.row;
+    const jan = (document.querySelector('#ibRow' + i + ' .ib-jan')?.value || '').trim();
+    if (!jan) tr.remove();
+  });
+
+  let added = 0;
+  let notFound = 0;
+  dataRows.forEach(function(r) {
+    const jan = String(r[0] == null ? '' : r[0]).trim();
+    if (!jan) return;
+    const caseQty = parseInt(r[1]) || 0;
+    const pieceQty = parseInt(r[2]) || 0;
+    const packOverride = (r[3] !== '' && r[3] != null) ? parseInt(r[3]) : null;
+    const cost = (r[4] !== '' && r[4] != null) ? parseFloat(r[4]) : null;
+    const sell = (r[5] !== '' && r[5] != null) ? parseFloat(r[5]) : null;
+
+    const i = ibAddRow();
+    if (i < 0) return;
+    const janInput = document.querySelector('#ibRow' + i + ' .ib-jan');
+    janInput.value = jan;
+    ibJanLookup(i); // マスタ照合で商品名・入数・単価を設定
+
+    const prod = _ibProducts.find(p => p.jan_code === jan);
+    if (!prod) notFound++;
+
+    // 取込値で上書き（指定がある項目のみ）
+    if (packOverride != null && !isNaN(packOverride) && packOverride > 0) {
+      document.getElementById('ibPack' + i).value = packOverride;
+    }
+    if (cost != null && !isNaN(cost)) document.getElementById('ibCost' + i).value = cost;
+    if (sell != null && !isNaN(sell)) document.getElementById('ibSell' + i).value = sell;
+    document.getElementById('ibCase' + i).value = caseQty || '';
+    document.getElementById('ibPiece' + i).value = pieceQty || '';
+    ibCalcTotal(i);
+    added++;
+  });
+
+  if (added === 0) { ibAddRow(); toast('取込対象の行がありませんでした', 'error'); return; }
+
+  let msg = added + '行を取り込みました';
+  if (notFound > 0) msg += '（うち' + notFound + '行は商品マスタ未登録のため登録対象外）';
+  toast(msg, notFound > 0 ? 'error' : 's');
 }
 
 async function openIbDetail(orderId) {
