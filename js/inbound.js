@@ -15,12 +15,15 @@ RENDER_FNS.inbound = async function renderInbound() {
       ${isOperator() ? '<button class="btn btn-p" onclick="openInboundModal()">+ 入荷登録</button>' : ''}
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;flex-wrap:wrap;">
-      <div class="sbar" style="max-width:420px;flex:1;">
+      <div class="sbar" style="max-width:340px;flex:1;min-width:180px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="ibSearch" value="${esc(_ibSearch)}" placeholder="入荷予定日 / 入荷先コード / 伝票番号 で検索..." oninput="filterInbound()">
+        <input id="ibSearch" value="${esc(_ibSearch)}" placeholder="入荷先コード / 伝票番号 で検索..." oninput="filterInbound()">
       </div>
+      <input class="fi" id="ibDateFrom" placeholder="開始日 例:6/5" style="width:108px;font-size:12px;" value="${_ibDateFrom ? _ibDateFrom.replace(/-/g, '/') : ''}" onchange="ibDateRangeChanged()">
+      <span style="color:var(--text2);">〜</span>
+      <input class="fi" id="ibDateTo" placeholder="終了日 例:6/30" style="width:108px;font-size:12px;" value="${_ibDateTo ? _ibDateTo.replace(/-/g, '/') : ''}" onchange="ibDateRangeChanged()">
       <button class="btn btn-g btn-sm" onclick="clearInboundSearch()">クリア</button>
-      <span style="font-size:10px;color:var(--text3);">※入荷予定日が過去の伝票は検索時のみ表示</span>
+      <span style="font-size:10px;color:var(--text3);">※過去の伝票は検索または日付指定で表示</span>
     </div>
     <div class="card"><div class="tw"><table>
       <thead><tr><th>伝票No</th><th class="hm">入荷先</th><th>入荷予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
@@ -33,8 +36,61 @@ RENDER_FNS.inbound = async function renderInbound() {
 let _ibOrders = [];
 let _ibTabFilter = 'all';
 let _ibSearch = '';
+let _ibDateFrom = '';   // 検索範囲 開始日 (ISO)
+let _ibDateTo = '';     // 検索範囲 終了日 (ISO)
 let _ibSuppliers = [];
 let _ibProducts = [];
+
+// 「6/5」等の短縮日付をISO(2026-06-05)へ変換。年省略時は今年を補完。
+// 対応: 6/5, 06-05, 2026/6/5, 2026-06-05, 20260605, 6月5日, Excelシリアル値
+function ibParseShortDate(v) {
+  if (v == null) return null;
+  if (v instanceof Date && !isNaN(v)) {
+    return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  // Excelシリアル値 (1900年起点)
+  if (/^\d{5}$/.test(s)) {
+    const n = parseInt(s);
+    if (n > 40000 && n < 80000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  if (/^\d{8}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  let m = s.match(/^(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})日?$/);
+  if (m) return m[1] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[3]).padStart(2, '0');
+  m = s.match(/^(\d{1,2})[\/\-月](\d{1,2})日?$/);
+  if (m) {
+    const mo = parseInt(m[1]), da = parseInt(m[2]);
+    if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
+      const y = new Date().getFullYear();
+      return y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
+    }
+  }
+  return null;
+}
+
+// 検索用日付入力: 短縮入力を変換して「2026/06/05」形式で表示
+function ibApplyShortDate(el) {
+  if (!el) return null;
+  const raw = el.value.trim();
+  if (!raw) return null;
+  const iso = ibParseShortDate(raw);
+  if (!iso) { toast('日付の形式が不正です: ' + raw + '（例: 6/5）', 'error'); el.value = ''; return null; }
+  el.value = iso.replace(/-/g, '/');
+  return iso;
+}
+
+function ibDateRangeChanged() {
+  _ibDateFrom = ibApplyShortDate(document.getElementById('ibDateFrom')) || '';
+  _ibDateTo = ibApplyShortDate(document.getElementById('ibDateTo')) || '';
+  if (_ibDateFrom && _ibDateTo && _ibDateFrom > _ibDateTo) {
+    toast('開始日が終了日より後になっています', 'error');
+  }
+  renderIbTable();
+}
 
 function setIbTab(tab, tabEl) {
   _ibTabFilter = tab;
@@ -50,8 +106,14 @@ function filterInbound() {
 
 function clearInboundSearch() {
   _ibSearch = '';
+  _ibDateFrom = '';
+  _ibDateTo = '';
   const el = document.getElementById('ibSearch');
   if (el) el.value = '';
+  const f = document.getElementById('ibDateFrom');
+  if (f) f.value = '';
+  const t = document.getElementById('ibDateTo');
+  if (t) t.value = '';
   renderIbTable();
 }
 
@@ -79,8 +141,12 @@ function renderIbTable() {
       const supName = (o.suppliers?.name || o.supplier || '').toLowerCase();
       return slip.includes(q) || date.includes(q) || supCode.includes(q) || supName.includes(q);
     });
-  } else {
-    // 検索なしの通常表示では、入荷予定日が過去の伝票は非表示（検索すると表示される）
+  }
+  // 日付範囲検索: 開始日〜終了日（過去から未来まで指定可）
+  if (_ibDateFrom) filtered = filtered.filter(o => o.planned_date && o.planned_date.slice(0, 10) >= _ibDateFrom);
+  if (_ibDateTo) filtered = filtered.filter(o => o.planned_date && o.planned_date.slice(0, 10) <= _ibDateTo);
+  // 検索も日付指定もない通常表示では、入荷予定日が過去の伝票は非表示
+  if (!q && !_ibDateFrom && !_ibDateTo) {
     const today = new Date().toISOString().slice(0, 10);
     filtered = filtered.filter(o => !o.planned_date || o.planned_date.slice(0, 10) >= today);
   }
@@ -149,7 +215,7 @@ async function openInboundModal(orderId) {
     </div>
     <hr style="border-color:var(--border);">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-      <div class="flbl" style="margin:0;">明細行</div>
+      <div class="flbl" style="margin:0;">明細行（1伝票につき最大10行）</div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-g btn-sm" onclick="ibDownloadTemplate()">テンプレート</button>
         <label class="btn btn-g btn-sm" style="cursor:pointer;margin:0;">CSV / Excel取込<input type="file" accept=".csv,.xlsx,.xls" onchange="ibHandleImportFile(this)" style="display:none;"></label>
@@ -190,9 +256,9 @@ async function openInboundModal(orderId) {
   }
 }
 
-// 修正入力: 既存明細を行にプリフィル
+// 修正入力: 既存明細を行にプリフィル（上限より多い既存伝票も全行表示）
 function ibPrefillRow(it) {
-  const i = ibAddRow();
+  const i = ibAddRow(true);
   if (i < 0) return;
   const prod = _ibProducts.find(p => p.id === it.product_id);
   const janInput = document.querySelector('#ibRow' + i + ' .ib-jan');
@@ -229,9 +295,16 @@ function ibRowInnerHtml(i) {
     <td style="padding:4px 3px;font-family:var(--mono);font-size:11px;font-weight:700;" id="ibTotal${i}">—</td>`;
 }
 
-function ibAddRow() {
+const IB_MAX_ROWS = 10;   // 1伝票あたりの明細上限
+
+function ibAddRow(force) {
   const tbody = document.getElementById('ibItemsBody');
   if (!tbody) return -1;
+  // 上限チェック（既存伝票の修正時プリフィルは force=true で回避）
+  if (!force && tbody.querySelectorAll('.ib-row').length >= IB_MAX_ROWS) {
+    toast('1伝票につき明細は' + IB_MAX_ROWS + '行までです', 'error');
+    return -1;
+  }
   const i = _ibRowSeq++;
   const tr = document.createElement('tr');
   tr.id = 'ibRow' + i;
@@ -334,6 +407,10 @@ async function saveInbound() {
     });
   });
   if (!items.length) { toast('明細を1行以上入力してください（商品と数量が必要です）', 'error'); return; }
+  if (!_ibEditOrderId && items.length > IB_MAX_ROWS) {
+    toast('1伝票につき明細は' + IB_MAX_ROWS + '行までです', 'error');
+    return;
+  }
 
   const supplierName = supplierId
     ? (_ibSuppliers.find(s => s.id === supplierId)?.name || null)
@@ -396,10 +473,10 @@ async function saveInbound() {
 // 取込テンプレート（明細列）。数量はケース数×入数＋ピース数で総ピースを算出。
 // 入数が空欄の場合は商品マスタの入数を使用。
 function ibDownloadTemplate() {
-  const header = ['JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価', 'ロットNo'];
-  const sample = ['4901234567890', '5', '3', '24', '', '', 'LOT2026A'];
+  const header = ['伝票番号', '入荷日', '入荷先コード', 'JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価', 'ロットNo'];
+  const sample = ['IN-0001', '6/5', 'SUP001', '4901234567890', '5', '3', '24', '', '', 'LOT2026A'];
   const ws = XLSX.utils.aoa_to_sheet([header, sample]);
-  ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '入荷明細');
   XLSX.writeFile(wb, '入荷明細テンプレート.xlsx');
@@ -424,7 +501,36 @@ async function ibHandleImportFile(input) {
   }
 }
 
+function _ibLooksLikeJan(v) {
+  v = String(v == null ? '' : v).trim();
+  return /^\d{8}$|^\d{13}$/.test(v);
+}
+
 function ibImportRows(dataRows) {
+  // 列レイアウト判定:
+  //   新: 伝票番号 | 入荷日 | 入荷先コード | JAN | ケース | ピース | 入数 | 原単価 | 売単価 | ロットNo
+  //   旧: JAN | ケース | ピース | 入数 | 原単価 | 売単価 | ロットNo （互換読み込み）
+  const first = dataRows[0] || [];
+  const isNewFormat = _ibLooksLikeJan(first[3]) || !_ibLooksLikeJan(first[0]);
+  const COL = isNewFormat
+    ? { slip: 0, date: 1, sup: 2, jan: 3, cas: 4, pcs: 5, pack: 6, cost: 7, sell: 8, lot: 9 }
+    : { slip: -1, date: -1, sup: -1, jan: 0, cas: 1, pcs: 2, pack: 3, cost: 4, sell: 5, lot: 6 };
+
+  // ヘッダ項目（伝票番号・入荷日・入荷先）を先頭行から反映
+  let headerSlip = '';
+  if (isNewFormat) {
+    headerSlip = String(first[COL.slip] == null ? '' : first[COL.slip]).trim();
+    const dISO = ibParseShortDate(first[COL.date]);
+    const supCode = String(first[COL.sup] == null ? '' : first[COL.sup]).trim();
+    if (headerSlip) document.getElementById('ib_slip').value = headerSlip;
+    if (dISO) document.getElementById('ib_date').value = dISO;
+    if (supCode) {
+      const sup = _ibSuppliers.find(s => (s.code || '').toLowerCase() === supCode.toLowerCase());
+      if (sup) document.getElementById('ib_supplier').value = sup.id;
+      else toast('入荷先コードがマスタに見つかりません: ' + supCode, 'error');
+    }
+  }
+
   // 既存の空行（JAN未入力）を除去してから取込結果を追加
   document.querySelectorAll('#ibItemsBody .ib-row').forEach(function(tr) {
     const i = tr.dataset.row;
@@ -434,17 +540,29 @@ function ibImportRows(dataRows) {
 
   let added = 0;
   let notFound = 0;
+  let otherSlip = 0;
+  let overflow = 0;
   dataRows.forEach(function(r) {
-    const jan = String(r[0] == null ? '' : r[0]).trim();
+    const jan = String(r[COL.jan] == null ? '' : r[COL.jan]).trim();
     if (!jan) return;
-    const caseQty = parseInt(r[1]) || 0;
-    const pieceQty = parseInt(r[2]) || 0;
-    const packOverride = (r[3] !== '' && r[3] != null) ? parseInt(r[3]) : null;
-    const cost = (r[4] !== '' && r[4] != null) ? parseFloat(r[4]) : null;
-    const sell = (r[5] !== '' && r[5] != null) ? parseFloat(r[5]) : null;
-    const lot = String(r[6] == null ? '' : r[6]).trim();
 
-    const i = ibAddRow();
+    // 別伝票番号の行は対象外（1伝票=1取込）
+    if (isNewFormat && headerSlip) {
+      const rowSlip = String(r[COL.slip] == null ? '' : r[COL.slip]).trim();
+      if (rowSlip && rowSlip !== headerSlip) { otherSlip++; return; }
+    }
+
+    // 明細上限（1伝票10行）
+    if (document.querySelectorAll('#ibItemsBody .ib-row').length >= IB_MAX_ROWS) { overflow++; return; }
+
+    const caseQty = parseInt(r[COL.cas]) || 0;
+    const pieceQty = parseInt(r[COL.pcs]) || 0;
+    const packOverride = (r[COL.pack] !== '' && r[COL.pack] != null) ? parseInt(r[COL.pack]) : null;
+    const cost = (r[COL.cost] !== '' && r[COL.cost] != null) ? parseFloat(r[COL.cost]) : null;
+    const sell = (r[COL.sell] !== '' && r[COL.sell] != null) ? parseFloat(r[COL.sell]) : null;
+    const lot = String(r[COL.lot] == null ? '' : r[COL.lot]).trim();
+
+    const i = ibAddRow(true);
     if (i < 0) return;
     const janInput = document.querySelector('#ibRow' + i + ' .ib-jan');
     janInput.value = jan;
@@ -469,8 +587,12 @@ function ibImportRows(dataRows) {
   if (added === 0) { ibAddRow(); toast('取込対象の行がありませんでした', 'error'); return; }
 
   let msg = added + '行を取り込みました';
-  if (notFound > 0) msg += '（うち' + notFound + '行は商品マスタ未登録のため登録対象外）';
-  toast(msg, notFound > 0 ? 'error' : 's');
+  const warns = [];
+  if (notFound > 0) warns.push(notFound + '行は商品マスタ未登録のため登録対象外');
+  if (otherSlip > 0) warns.push('別伝票番号の' + otherSlip + '行を除外（伝票 ' + headerSlip + ' のみ取込）');
+  if (overflow > 0) warns.push('明細上限' + IB_MAX_ROWS + '行を超える' + overflow + '行を除外');
+  if (warns.length) msg += '（' + warns.join(' / ') + '）';
+  toast(msg, warns.length ? 'error' : 's');
 }
 
 async function openIbDetail(orderId) {
