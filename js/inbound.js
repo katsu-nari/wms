@@ -20,6 +20,7 @@ RENDER_FNS.inbound = async function renderInbound() {
         <input id="ibSearch" value="${esc(_ibSearch)}" placeholder="入荷予定日 / 入荷先コード / 伝票番号 で検索..." oninput="filterInbound()">
       </div>
       <button class="btn btn-g btn-sm" onclick="clearInboundSearch()">クリア</button>
+      <span style="font-size:10px;color:var(--text3);">※入荷予定日が過去の伝票は検索時のみ表示</span>
     </div>
     <div class="card"><div class="tw"><table>
       <thead><tr><th>伝票No</th><th class="hm">入荷先</th><th>入荷予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
@@ -78,6 +79,10 @@ function renderIbTable() {
       const supName = (o.suppliers?.name || o.supplier || '').toLowerCase();
       return slip.includes(q) || date.includes(q) || supCode.includes(q) || supName.includes(q);
     });
+  } else {
+    // 検索なしの通常表示では、入荷予定日が過去の伝票は非表示（検索すると表示される）
+    const today = new Date().toISOString().slice(0, 10);
+    filtered = filtered.filter(o => !o.planned_date || o.planned_date.slice(0, 10) >= today);
   }
   const tb = document.getElementById('ibTb');
   if (!tb) return;
@@ -151,13 +156,14 @@ async function openInboundModal(orderId) {
         <button class="btn btn-g btn-sm" onclick="ibAddRow()">＋ 行追加</button>
       </div>
     </div>
-    <div class="tw"><table style="min-width:720px;">
+    <div class="tw"><table style="min-width:800px;">
       <thead><tr>
         <th style="width:34px;"></th>
         <th style="width:120px;">JANコード</th>
         <th>商品名</th>
-        <th style="width:90px;">原単価</th>
-        <th style="width:90px;">売単価</th>
+        <th style="width:90px;">ロットNo</th>
+        <th style="width:80px;">原単価</th>
+        <th style="width:80px;">売単価</th>
         <th style="width:60px;">入数</th>
         <th style="width:70px;">ケース数</th>
         <th style="width:70px;">ピース数</th>
@@ -195,6 +201,7 @@ function ibPrefillRow(it) {
   pnameEl.textContent = prod ? prod.name : '(商品マスタ未登録)';
   pnameEl.style.color = prod ? 'var(--text)' : 'var(--red)';
   document.getElementById('ibPid' + i).value = it.product_id;
+  document.getElementById('ibLot' + i).value = it.lot_no || '';
   if (it.cost_price != null) document.getElementById('ibCost' + i).value = it.cost_price;
   if (it.sell_price != null) document.getElementById('ibSell' + i).value = it.sell_price;
   const pack = it.pack_size || prod?.pack_size || 1;
@@ -213,8 +220,9 @@ function ibRowInnerHtml(i) {
     <td style="padding:4px 6px;text-align:center;"><button class="btn btn-g btn-sm" style="padding:2px 7px;" onclick="ibRemoveRow(${i})" title="行を削除">×</button></td>
     <td style="padding:4px 3px;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;width:110px;" placeholder="JAN" data-row="${i}" onchange="ibJanLookup(${i})"></td>
     <td style="padding:4px 3px;"><span class="ib-pname" id="ibPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" class="ib-pid" id="ibPid${i}"></td>
-    <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
-    <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:80px;" type="number" step="0.01"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-lot" id="ibLot${i}" style="font-size:11px;padding:5px 6px;width:84px;" placeholder="ロット"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:74px;" type="number" step="0.01"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:74px;" type="number" step="0.01"></td>
     <td style="padding:4px 3px;"><input class="fi ib-pack" id="ibPack${i}" style="font-size:11px;padding:5px 6px;width:54px;" type="number" min="1" value="1" oninput="ibCalcTotal(${i})"></td>
     <td style="padding:4px 3px;"><input class="fi ib-case" id="ibCase${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
     <td style="padding:4px 3px;"><input class="fi ib-piece" id="ibPiece${i}" style="font-size:11px;padding:5px 6px;width:60px;" type="number" min="0" value="" oninput="ibCalcTotal(${i})"></td>
@@ -322,6 +330,7 @@ async function saveInbound() {
       case_qty: caseQty,
       piece_qty: pieceQty,
       pack_size: packSize,
+      lot_no: (document.getElementById('ibLot' + i)?.value || '').trim(),
     });
   });
   if (!items.length) { toast('明細を1行以上入力してください（商品と数量が必要です）', 'error'); return; }
@@ -387,10 +396,10 @@ async function saveInbound() {
 // 取込テンプレート（明細列）。数量はケース数×入数＋ピース数で総ピースを算出。
 // 入数が空欄の場合は商品マスタの入数を使用。
 function ibDownloadTemplate() {
-  const header = ['JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価'];
-  const sample = ['4901234567890', '5', '3', '24', '', ''];
+  const header = ['JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価', 'ロットNo'];
+  const sample = ['4901234567890', '5', '3', '24', '', '', 'LOT2026A'];
   const ws = XLSX.utils.aoa_to_sheet([header, sample]);
-  ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+  ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '入荷明細');
   XLSX.writeFile(wb, '入荷明細テンプレート.xlsx');
@@ -433,6 +442,7 @@ function ibImportRows(dataRows) {
     const packOverride = (r[3] !== '' && r[3] != null) ? parseInt(r[3]) : null;
     const cost = (r[4] !== '' && r[4] != null) ? parseFloat(r[4]) : null;
     const sell = (r[5] !== '' && r[5] != null) ? parseFloat(r[5]) : null;
+    const lot = String(r[6] == null ? '' : r[6]).trim();
 
     const i = ibAddRow();
     if (i < 0) return;
@@ -449,6 +459,7 @@ function ibImportRows(dataRows) {
     }
     if (cost != null && !isNaN(cost)) document.getElementById('ibCost' + i).value = cost;
     if (sell != null && !isNaN(sell)) document.getElementById('ibSell' + i).value = sell;
+    if (lot) document.getElementById('ibLot' + i).value = lot;
     document.getElementById('ibCase' + i).value = caseQty || '';
     document.getElementById('ibPiece' + i).value = pieceQty || '';
     ibCalcTotal(i);
@@ -478,10 +489,11 @@ async function openIbDetail(orderId) {
       <div><span class="flbl">状態: </span>${statusBadge(order.status)}</div>
     </div>
     <div class="tw"><table>
-      <thead><tr><th>JAN</th><th>商品名</th><th>予定</th><th>実数</th><th>格納先</th><th>状態</th></tr></thead>
+      <thead><tr><th>JAN</th><th>商品名</th><th>ロット</th><th>予定</th><th>実数</th><th>格納先</th><th>状態</th></tr></thead>
       <tbody>${items.map(it => `<tr>
         <td style="font-family:var(--mono);font-size:11px;">${esc(it.products?.jan_code || it.products?.sku)}</td>
         <td>${esc(it.products?.name)}</td>
+        <td style="font-family:var(--mono);font-size:11px;">${esc(it.lot_no) || '—'}</td>
         <td style="font-family:var(--mono);">${it.planned_qty}</td>
         <td style="font-family:var(--mono);${it.received_qty > 0 ? 'color:var(--accent);' : ''}">${it.received_qty || '—'}</td>
         <td style="font-family:var(--mono);font-size:11px;">${esc(it.locations?.code) || '—'}</td>
@@ -518,7 +530,9 @@ async function openIbPutaway(orderId) {
   if (!pending.length) { toast('全明細が完了済みです'); return; }
 
   const { data: locs } = await sb.from('locations').select('id, code').eq('is_active', true).order('code');
-  const locOpts = (locs || []).map(l => `<option value="${l.id}">${esc(l.code)}</option>`).join('');
+  // 入荷計上の初期ロケーションは入荷仮置き場 N-8888-888
+  const IB_DEFAULT_LOC = 'N-8888-888';
+  const locOpts = (locs || []).map(l => `<option value="${l.id}"${l.code === IB_DEFAULT_LOC ? ' selected' : ''}>${esc(l.code)}</option>`).join('');
 
   const rows = pending.map((it, i) => `
     <div class="fr mb12" style="align-items:end;">
@@ -590,40 +604,45 @@ async function execPutaway() {
 
 // A4印刷用の共通CSS
 const _IB_PRINT_CSS = `
-@page { size: A4; margin: 12mm; }
+@page { size: A4 landscape; margin: 10mm 12mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; font-size: 12px; color: #111; }
 .sheet { page-break-after: always; }
 .sheet:last-child { page-break-after: auto; }
-.hd { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #111; padding-bottom: 8px; margin-bottom: 10px; }
-h1 { font-size: 21px; letter-spacing: .1em; }
-.meta { font-size: 11.5px; line-height: 1.8; }
-.meta b { display: inline-block; min-width: 72px; color: #444; font-weight: 500; }
+.hd { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #111; padding-bottom: 8px; margin-bottom: 8px; }
+h1 { font-size: 22px; letter-spacing: .1em; }
+.meta { font-size: 12px; line-height: 1.8; }
+.meta b { display: inline-block; min-width: 76px; color: #444; font-weight: 500; }
 .qr { image-rendering: pixelated; border: 1px solid #999; }
 .qr-cap { font-size: 9px; color: #555; text-align: center; margin-top: 3px; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-th, td { border: 1px solid #444; padding: 6px 7px; font-size: 11px; text-align: left; }
+th, td { border: 1px solid #444; padding: 7px 8px; font-size: 11px; text-align: left; }
 th { background: #ececec; font-weight: 600; }
 td.num, th.num { text-align: right; font-family: "Courier New", monospace; }
 .mono { font-family: "Courier New", monospace; }
-.chk { width: 34px; text-align: center; font-size: 14px; }
-.fillbox { min-width: 58px; }
-.sig { margin-top: 22px; display: flex; gap: 14px; justify-content: flex-end; }
-.sigbox { border: 1px solid #444; width: 110px; height: 62px; font-size: 10px; text-align: center; padding-top: 4px; color: #555; }
-.foot { margin-top: 12px; font-size: 9.5px; color: #666; display: flex; justify-content: space-between; }
-/* 商品看板 */
-.kanban { page-break-after: always; border: 4px solid #111; height: 262mm; padding: 14mm 12mm; display: flex; flex-direction: column; }
+/* 強調セル: JANコード・商品名・入数・入荷数量・ロットNo */
+td.emph { font-size: 15px; font-weight: 700; }
+td.emph.num { font-size: 16px; }
+.chk { width: 36px; text-align: center; font-size: 15px; }
+.fillbox { min-width: 64px; }
+.sig { margin-top: 16px; display: flex; gap: 14px; justify-content: flex-end; }
+.sigbox { border: 1px solid #444; width: 110px; height: 56px; font-size: 10px; text-align: center; padding-top: 4px; color: #555; }
+.foot { margin-top: 10px; font-size: 9.5px; color: #666; display: flex; justify-content: space-between; }
+/* 商品看板 (A4横・1商品1枚) */
+.kanban { page-break-after: always; border: 4px solid #111; height: 186mm; padding: 10mm 12mm; display: flex; flex-direction: column; }
 .kanban:last-child { page-break-after: auto; }
 .kb-tag { font-size: 13px; letter-spacing: .3em; border: 1.5px solid #111; display: inline-block; padding: 3px 14px; }
-.kb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10mm; }
+.kb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6mm; }
 .kb-date { font-size: 12px; color: #333; text-align: right; line-height: 1.7; }
-.kb-name { font-size: 38px; font-weight: 800; line-height: 1.3; margin-bottom: 6mm; word-break: break-all; }
-.kb-code { font-family: "Courier New", monospace; font-size: 17px; color: #222; margin-bottom: 10mm; line-height: 1.9; }
-.kb-qty { display: flex; align-items: baseline; gap: 14px; border-top: 2px solid #111; border-bottom: 2px solid #111; padding: 8mm 0; margin-bottom: 8mm; }
-.kb-qty-num { font-size: 64px; font-weight: 800; font-family: "Courier New", monospace; }
-.kb-qty-sub { font-size: 15px; color: #333; }
-.kb-loc { font-size: 15px; margin-bottom: 4mm; }
-.kb-loc b { font-size: 26px; font-family: "Courier New", monospace; margin-left: 10px; }
+.kb-name { font-size: 44px; font-weight: 800; line-height: 1.25; margin-bottom: 4mm; word-break: break-all; }
+.kb-code { font-family: "Courier New", monospace; font-size: 22px; font-weight: 700; color: #111; margin-bottom: 5mm; line-height: 1.7; }
+.kb-qty { display: flex; align-items: baseline; gap: 16px; border-top: 2.5px solid #111; border-bottom: 2.5px solid #111; padding: 5mm 0; margin-bottom: 5mm; flex-wrap: wrap; }
+.kb-qty-num { font-size: 68px; font-weight: 800; font-family: "Courier New", monospace; }
+.kb-qty-sub { font-size: 18px; font-weight: 700; color: #111; }
+.kb-lot { font-size: 16px; margin-bottom: 3mm; }
+.kb-lot b { font-size: 24px; font-family: "Courier New", monospace; margin-left: 10px; }
+.kb-loc { font-size: 15px; margin-bottom: 3mm; }
+.kb-loc b { font-size: 24px; font-family: "Courier New", monospace; margin-left: 10px; }
 .kb-bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; }
 .kb-sup { font-size: 13px; color: #333; line-height: 1.8; }
 `;
@@ -665,12 +684,13 @@ async function ibPrintInspectionList(orderId) {
     const p = it.products || {};
     return '<tr>'
       + '<td class="num">' + (i + 1) + '</td>'
-      + '<td class="mono">' + esc(p.jan_code || p.sku || '') + '</td>'
-      + '<td>' + esc(p.name || '') + '</td>'
-      + '<td class="num">' + (it.pack_size || 1) + '</td>'
+      + '<td class="mono emph">' + esc(p.jan_code || p.sku || '') + '</td>'
+      + '<td class="emph">' + esc(p.name || '') + '</td>'
+      + '<td class="mono emph">' + (esc(it.lot_no) || '—') + '</td>'
+      + '<td class="num emph">' + (it.pack_size || 1) + '</td>'
       + '<td class="num">' + (it.case_qty || 0) + '</td>'
       + '<td class="num">' + (it.piece_qty || 0) + '</td>'
-      + '<td class="num"><strong>' + it.planned_qty.toLocaleString() + '</strong></td>'
+      + '<td class="num emph">' + it.planned_qty.toLocaleString() + '</td>'
       + '<td class="fillbox">&nbsp;</td>'
       + '<td class="chk">□</td>'
       + '</tr>';
@@ -695,11 +715,12 @@ async function ibPrintInspectionList(orderId) {
       + '</div>'
     + '</div>'
     + '<table><thead><tr>'
-      + '<th class="num" style="width:26px;">No</th><th style="width:110px;">JAN/コード</th><th>商品名</th>'
-      + '<th class="num" style="width:40px;">入数</th><th class="num" style="width:48px;">ケース</th><th class="num" style="width:48px;">ピース</th>'
-      + '<th class="num" style="width:60px;">予定数</th><th style="width:58px;">検品数</th><th class="chk">✓</th>'
+      + '<th class="num" style="width:28px;">No</th><th style="width:150px;">JANコード</th><th>商品名</th>'
+      + '<th style="width:110px;">ロットNo</th>'
+      + '<th class="num" style="width:58px;">入数</th><th class="num" style="width:52px;">ケース</th><th class="num" style="width:52px;">ピース</th>'
+      + '<th class="num" style="width:90px;">入荷数量</th><th style="width:70px;">検品数</th><th class="chk">✓</th>'
     + '</tr></thead><tbody>' + rows + '</tbody>'
-    + '<tfoot><tr><th colspan="6" style="text-align:right;">合計</th><th class="num">' + totalQty.toLocaleString() + '</th><th></th><th></th></tr></tfoot></table>'
+    + '<tfoot><tr><th colspan="7" style="text-align:right;">合計</th><th class="num" style="font-size:14px;">' + totalQty.toLocaleString() + '</th><th></th><th></th></tr></tfoot></table>'
     + '<div class="sig">'
       + '<div class="sigbox">検品者</div>'
       + '<div class="sigbox">確認者</div>'
@@ -727,10 +748,12 @@ async function ibPrintReceivingList(orderId) {
     const diff = (it.received_qty || 0) - it.planned_qty;
     return '<tr>'
       + '<td class="num">' + (i + 1) + '</td>'
-      + '<td class="mono">' + esc(p.jan_code || p.sku || '') + '</td>'
-      + '<td>' + esc(p.name || '') + '</td>'
+      + '<td class="mono emph">' + esc(p.jan_code || p.sku || '') + '</td>'
+      + '<td class="emph">' + esc(p.name || '') + '</td>'
+      + '<td class="mono emph">' + (esc(it.lot_no) || '—') + '</td>'
+      + '<td class="num emph">' + (it.pack_size || 1) + '</td>'
       + '<td class="num">' + it.planned_qty.toLocaleString() + '</td>'
-      + '<td class="num"><strong>' + (it.received_qty || 0).toLocaleString() + '</strong></td>'
+      + '<td class="num emph">' + (it.received_qty || 0).toLocaleString() + '</td>'
       + '<td class="num">' + (diff === 0 ? '±0' : (diff > 0 ? '+' + diff : diff)) + '</td>'
       + '<td class="mono">' + esc(it.locations?.code || '—') + '</td>'
       + '</tr>';
@@ -756,13 +779,14 @@ async function ibPrintReceivingList(orderId) {
       + '</div>'
     + '</div>'
     + '<table><thead><tr>'
-      + '<th class="num" style="width:26px;">No</th><th style="width:110px;">JAN/コード</th><th>商品名</th>'
-      + '<th class="num" style="width:60px;">予定数</th><th class="num" style="width:60px;">計上数</th>'
-      + '<th class="num" style="width:50px;">差異</th><th style="width:80px;">格納ロケ</th>'
+      + '<th class="num" style="width:28px;">No</th><th style="width:150px;">JANコード</th><th>商品名</th>'
+      + '<th style="width:110px;">ロットNo</th><th class="num" style="width:58px;">入数</th>'
+      + '<th class="num" style="width:70px;">予定数</th><th class="num" style="width:90px;">入荷数量</th>'
+      + '<th class="num" style="width:56px;">差異</th><th style="width:96px;">格納ロケ</th>'
     + '</tr></thead><tbody>' + rows + '</tbody>'
-    + '<tfoot><tr><th colspan="3" style="text-align:right;">合計</th>'
+    + '<tfoot><tr><th colspan="5" style="text-align:right;">合計</th>'
       + '<th class="num">' + totalPlanned.toLocaleString() + '</th>'
-      + '<th class="num">' + totalReceived.toLocaleString() + '</th>'
+      + '<th class="num" style="font-size:14px;">' + totalReceived.toLocaleString() + '</th>'
       + '<th class="num">' + (totalReceived - totalPlanned === 0 ? '±0' : (totalReceived - totalPlanned > 0 ? '+' : '') + (totalReceived - totalPlanned)) + '</th><th></th></tr></tfoot></table>'
     + '<div class="sig">'
       + '<div class="sigbox">計上者</div>'
@@ -798,6 +822,7 @@ async function ibPrintKanban(orderId) {
       jan_code: p.jan_code || '',
       sku: p.sku || '',
       name: p.name || '',
+      lot_no: it.lot_no || '',
       qty: qty,
     });
     const qrImg = _generateQrDataUrl(qrContent, 6);
@@ -808,13 +833,14 @@ async function ibPrintKanban(orderId) {
         + '<div class="kb-date">入荷日: ' + fmtDate(order.planned_date) + '<br>伝票: <span class="mono">' + esc(slip) + '</span></div>'
       + '</div>'
       + '<div class="kb-name">' + esc(p.name || '(商品名未設定)') + '</div>'
-      + '<div class="kb-code">SKU: ' + esc(p.sku || '—') + '<br>JAN: ' + esc(p.jan_code || '—') + '</div>'
+      + '<div class="kb-code">JAN: ' + esc(p.jan_code || '—') + '　SKU: ' + esc(p.sku || '—') + '</div>'
       + '<div class="kb-qty">'
         + '<span class="kb-qty-num">' + qty.toLocaleString() + '</span>'
         + '<span class="kb-qty-sub">' + esc(p.unit || '個')
           + (pack > 1 ? '（入数' + pack + ' × ' + caseQ + 'ケース' + (pieceQ > 0 ? ' ＋ バラ' + pieceQ : '') + '）' : '')
         + '</span>'
       + '</div>'
+      + '<div class="kb-lot">ロットNo<b>' + (esc(it.lot_no) || '—') + '</b></div>'
       + '<div class="kb-loc">格納ロケーション<b>' + esc(it.locations?.code || '未定') + '</b></div>'
       + '<div class="kb-bottom">'
         + '<div class="kb-sup">入荷先: ' + esc(supplierName) + '<br><span style="font-size:10px;color:#777;">SUPEREX LogiStation / ' + new Date().toLocaleString('ja-JP') + '</span></div>'
