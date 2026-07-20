@@ -121,3 +121,6 @@ function exportInventoryCSV() {
   downloadCSV('wms_inventory_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);
   toast('在庫一覧CSVをダウンロードしました');
 }
+
+// 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
+AUTO_REFRESH_FNS.inventory = loadInventory;

@@ -672,3 +672,6 @@ async function unlockUser(id) {
   toast('ロックを解除しました');
   await loadUsers();
 }
+
+// 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
+AUTO_REFRESH_FNS.stocktake = icLoadList;

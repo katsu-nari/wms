@@ -124,3 +124,6 @@ RENDER_FNS.dashboard = async function renderDashboard() {
       </tr>`).join('')
     : '<tr><td colspan="5" class="empty-state">まだ操作履歴がありません</td></tr>';
 };
+
+// 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
+AUTO_REFRESH_FNS.dashboard = RENDER_FNS.dashboard;

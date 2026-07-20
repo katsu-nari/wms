@@ -24,14 +24,19 @@ RENDER_FNS.outbound = async function renderOutbound() {
       <span style="color:var(--text2);">〜</span>
       <input class="fi" id="obDateTo" placeholder="終了日 例:6/30" style="width:108px;font-size:12px;" value="${_obDateTo ? _obDateTo.replace(/-/g, '/') : ''}" onchange="obDateRangeChanged()">
       <button class="btn btn-g btn-sm" onclick="clearOutboundSearch()">クリア</button>
+      ${isOperator() ? '<button class="btn btn-p btn-sm" onclick="execObBulkAllocate()">✓ 選択伝票を一括引当</button>' : ''}
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>伝票No</th><th class="hm">出荷先</th><th>予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
+      <thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="obCheckAll" onchange="obToggleAllSlips(this)"></th><th>伝票No</th><th class="hm">出荷先</th><th>予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
       <tbody id="obTb"></tbody>
     </table></div></div>
   `;
   await loadOutbound();
 };
+
+function obToggleAllSlips(el) {
+  document.querySelectorAll('#obTb .ob-slip-check').forEach(c => { c.checked = el.checked; });
+}
 
 let _obOrders = [];
 let _obTabFilter = 'all';
@@ -112,7 +117,9 @@ function renderObTable() {
     ? filtered.map(o => {
         const items = o.outbound_items || [];
         const totalQty = items.reduce((s, it) => s + (it.planned_qty || 0), 0);
+        const canAlloc = (o.status === 'pending' || (o.status === 'picking' && items.some(it => it.status === 'pending'))) && isOperator();
         return `<tr>
+          <td style="text-align:center;">${canAlloc ? `<input type="checkbox" class="ob-slip-check" data-order-id="${o.id}">` : ''}</td>
           <td style="font-family:var(--mono);font-size:11px;">${esc(o.slip_no || o.id.slice(0, 8))}</td>
           <td class="hm">${esc(o.clients?.name || o.customer) || '—'}</td>
           <td style="font-family:var(--mono);font-size:11px;">${fmtDate(o.planned_date)}</td>
@@ -121,12 +128,12 @@ function renderObTable() {
           <td>${statusBadge(o.status)}</td>
           <td>
             <button class="btn btn-g btn-sm" onclick="openObDetail('${o.id}')">詳細</button>
-            ${(o.status === 'pending' || (o.status === 'picking' && items.some(it => it.status === 'pending'))) && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openObAllocate('${o.id}')">引当</button>` : ''}
+            ${canAlloc ? `<button class="btn btn-p btn-sm" onclick="openObAllocate('${o.id}')">引当</button>` : ''}
             ${o.status === 'picking' && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openObShipAllocated('${o.id}')">出荷</button><button class="btn btn-g btn-sm" onclick="obPrintPickingList('${o.id}')">ピックリスト</button>` : ''}
           </td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="7" class="empty-state">${(_obSearch || _obDateFrom || _obDateTo || _obTabFilter !== 'all') ? '該当する出庫データがありません' : '出庫データがありません'}</td></tr>`;
+    : `<tr><td colspan="8" class="empty-state">${(_obSearch || _obDateFrom || _obDateTo || _obTabFilter !== 'all') ? '該当する出庫データがありません' : '出庫データがありません'}</td></tr>`;
 }
 
 async function openOutboundModal() {
@@ -358,6 +365,7 @@ async function execPick() {
 let _obAllocItems = [];        // 引当対象明細
 let _obAllocCandidates = {};   // product_id → 利用可能在庫行[]
 let _obAllocPlan = {};         // item_id → [{inventory_id, qty, label}]
+let _obBusy = false;           // 確定処理の二重実行防止フラグ
 
 async function openObAllocate(orderId) {
   const { data: order, error } = await sb.from('outbound_orders')
@@ -493,28 +501,30 @@ async function execObAllocate(orderId) {
   if (!allocations.length) { toast('引当対象がありません', 'error'); return; }
 
   if (!confirm('チェックした明細を全数引当します。在庫が引き落とされ、取消はできません。よろしいですか？')) return;
+  if (_obBusy) return;   // 二重実行防止
+  _obBusy = true;
+  try {
+    const { error } = await sb.rpc('fn_outbound_allocate', {
+      p_order_id: orderId,
+      p_allocations: allocations,
+    });
+    if (error) { toast('引当失敗: ' + error.message, 'error'); return; }
 
-  const { error } = await sb.rpc('fn_outbound_allocate', {
-    p_order_id: orderId,
-    p_allocations: allocations,
-  });
-  if (error) { toast('引当失敗: ' + error.message, 'error'); return; }
+    closeModal();
+    toast('引当を確定し在庫を引き落としました');
+    await loadOutbound();
 
-  closeModal();
-  toast('引当を確定し在庫を引き落としました');
-  await loadOutbound();
-
-  // ④ 引当完了後はピッキングリストを自動出力
-  await obPrintPickingList(orderId);
+    // ④ 引当完了後はピッキングリストを自動出力
+    await obPrintPickingList(orderId);
+  } finally {
+    _obBusy = false;
+  }
 }
 
-// ---------- 在庫ピッキングリスト (A4横・引当内容) ----------
-async function obPrintPickingList(orderId) {
-  const { data: order } = await sb.from('outbound_orders')
-    .select('*, clients(name, code), outbound_items(*, products(sku, name, jan_code), outbound_allocations(qty, inventory(lot_no, expiry, locations(code))))')
-    .eq('id', orderId).single();
-  if (!order) { toast('出庫データの取得に失敗しました', 'error'); return; }
+// ---------- 在庫ピッキングリスト (A4横・引当内容・出荷確定QR付き) ----------
 
+// 1伝票分のピッキングリスト(1シート)を生成
+function _obBuildPickingSheet(order) {
   // 引当行をフラット化し、ピッキング動線順(ロケコード順)に並べる
   const lines = [];
   (order.outbound_items || []).forEach(it => {
@@ -530,12 +540,16 @@ async function obPrintPickingList(orderId) {
       });
     });
   });
-  if (!lines.length) { toast('引当がありません', 'error'); return; }
+  if (!lines.length) return null;
   lines.sort((a, b) => a.loc.localeCompare(b.loc));
 
   const clientName = order.clients?.name || order.customer || '—';
   const slip = order.slip_no || order.id.slice(0, 8);
   const totalQty = lines.reduce((s, l) => s + l.qty, 0);
+
+  // このQRを携帯端末のスキャン画面で読むと出荷確定画面が開く
+  const qrContent = JSON.stringify({ type: 'outbound_order', id: order.id, slip_no: order.slip_no || '' });
+  const qrImg = _generateQrDataUrl(qrContent, 6);
 
   const rows = lines.map((l, i) => '<tr>'
     + '<td class="num">' + (i + 1) + '</td>'
@@ -548,7 +562,7 @@ async function obPrintPickingList(orderId) {
     + '<td class="chk">□</td>'
   + '</tr>').join('');
 
-  const body = '<div class="sheet">'
+  return '<div class="sheet">'
     + '<div class="hd">'
       + '<div>'
         + '<h1>在庫ピッキングリスト</h1>'
@@ -558,6 +572,10 @@ async function obPrintPickingList(orderId) {
           + '<div><b>出荷予定日</b> ' + fmtDate(order.planned_date) + '</div>'
           + '<div><b>引当日時</b> ' + new Date().toLocaleString('ja-JP') + '</div>'
         + '</div>'
+      + '</div>'
+      + '<div style="text-align:center;">'
+        + (qrImg ? '<img class="qr" src="' + qrImg + '" style="width:30mm;height:30mm;">' : '')
+        + '<div class="qr-cap">スキャンで出荷確定へ</div>'
       + '</div>'
     + '</div>'
     + '<table><thead><tr>'
@@ -572,8 +590,141 @@ async function obPrintPickingList(orderId) {
     + '</div>'
     + '<div class="foot"><span>SUPEREX LogiStation</span><span>出力: ' + new Date().toLocaleString('ja-JP') + '</span></div>'
   + '</div>';
+}
 
-  _ibOpenPrintWindow('ピッキングリスト_' + slip, body);
+// 複数伝票のピッキングリストを1つの印刷ウィンドウにまとめて出力
+async function obPrintPickingLists(orderIds) {
+  const { data: orders } = await sb.from('outbound_orders')
+    .select('*, clients(name, code), outbound_items(*, products(sku, name, jan_code), outbound_allocations(qty, inventory(lot_no, expiry, locations(code))))')
+    .in('id', orderIds);
+  const sheets = (orders || [])
+    .sort((a, b) => (a.planned_date || '').localeCompare(b.planned_date || ''))
+    .map(o => _obBuildPickingSheet(o)).filter(Boolean);
+  if (!sheets.length) { toast('引当がありません', 'error'); return; }
+  _ibOpenPrintWindow('ピッキングリスト', sheets.join(''));
+}
+
+async function obPrintPickingList(orderId) {
+  await obPrintPickingLists([orderId]);
+}
+
+// ---------- 伝票単位の一括引当 (一覧のチェックボックス) ----------
+
+let _obBulkPlans = [];
+
+async function execObBulkAllocate() {
+  const ids = Array.from(document.querySelectorAll('#obTb .ob-slip-check:checked')).map(c => c.dataset.orderId);
+  if (!ids.length) { toast('引当する伝票にチェックを付けてください', 'error'); return; }
+
+  const { data: orders } = await sb.from('outbound_orders')
+    .select('*, outbound_items(*, products(sku, name, jan_code)), clients(name, code)')
+    .in('id', ids);
+
+  // 出荷予定日の早い伝票から優先的に在庫を割り当てる
+  const targets = (orders || [])
+    .filter(o => o.status === 'pending' || o.status === 'picking')
+    .sort((a, b) => (a.planned_date || '').localeCompare(b.planned_date || ''));
+  if (!targets.length) { toast('引当対象の伝票がありません', 'error'); return; }
+
+  const productIds = [...new Set(targets.flatMap(o =>
+    (o.outbound_items || []).filter(it => it.status === 'pending').map(it => it.product_id)))];
+  if (!productIds.length) { toast('引当対象の明細がありません', 'error'); return; }
+
+  const { data: invRows } = await sb.from('v_inventory_with_names')
+    .select('id, product_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
+    .in('product_id', productIds)
+    .gt('available_qty', 0);
+  const cands = {};
+  (invRows || []).forEach(r => { (cands[r.product_id] = cands[r.product_id] || []).push(r); });
+  Object.values(cands).forEach(list => list.sort((a, b) => {
+    const ea = a.expiry || '9999-12-31', eb = b.expiry || '9999-12-31';
+    if (ea !== eb) return ea < eb ? -1 : 1;
+    return (a.location_code || '').localeCompare(b.location_code || '');
+  }));
+
+  // 伝票ごとにFIFOプラン作成。全数を賄えない伝票は対象外(在庫は他伝票へ)
+  const usedMap = {};
+  _obBulkPlans = [];
+  const results = [];
+  targets.forEach(o => {
+    const items = (o.outbound_items || []).filter(it => it.status === 'pending');
+    if (!items.length) return;
+    const allocs = [];
+    const localUsed = [];
+    let shortage = 0;
+    items.forEach(it => {
+      let remaining = it.planned_qty;
+      (cands[it.product_id] || []).forEach(inv => {
+        if (remaining <= 0) return;
+        const avail = inv.available_qty - (usedMap[inv.id] || 0);
+        if (avail <= 0) return;
+        const take = Math.min(avail, remaining);
+        allocs.push({ item_id: it.id, inventory_id: inv.id, qty: take });
+        localUsed.push({ id: inv.id, qty: take });
+        usedMap[inv.id] = (usedMap[inv.id] || 0) + take;
+        remaining -= take;
+      });
+      if (remaining > 0) shortage += remaining;
+    });
+    if (shortage > 0) {
+      localUsed.forEach(u => { usedMap[u.id] -= u.qty; });
+      results.push({ order: o, ok: false, shortage });
+    } else {
+      results.push({ order: o, ok: true });
+      _obBulkPlans.push({ order: o, allocations: allocs });
+    }
+  });
+
+  const okCount = _obBulkPlans.length;
+  const rows = results.map(r => `<tr>
+    <td style="font-family:var(--mono);font-size:11px;">${esc(r.order.slip_no || r.order.id.slice(0, 8))}</td>
+    <td>${esc(r.order.clients?.name || r.order.customer) || '—'}</td>
+    <td style="font-family:var(--mono);font-size:11px;">${fmtDate(r.order.planned_date)}</td>
+    <td>${r.ok ? '<span style="color:var(--green);font-weight:700;">全数OK</span>' : '<span style="color:var(--red);font-weight:700;">在庫不足 ' + r.shortage + '</span>'}</td>
+  </tr>`).join('');
+
+  const body = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+      チェックした伝票を出荷予定日の早い順に全数引当します。<br>
+      <span style="color:var(--red);">引当確定と同時に在庫が引き落とされ、取消はできません。</span>
+      在庫不足の伝票は今回の引当から除外されます。確定後はピッキングリストが自動で表示されます。
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>伝票No</th><th>出荷先</th><th>予定日</th><th>判定</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
+  const footer = `
+    <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
+    ${okCount > 0 ? `<button class="btn btn-p" onclick="execObBulkAllocateConfirm()">${okCount}伝票を一括引当</button>` : ''}
+  `;
+  openModal('一括引当の確認 (' + results.length + '伝票)', body, footer, true);
+}
+
+async function execObBulkAllocateConfirm() {
+  if (_obBusy) return;   // 二重実行防止
+  _obBusy = true;
+  try {
+    const done = [];
+    const failed = [];
+    for (const p of _obBulkPlans) {
+      const { error } = await sb.rpc('fn_outbound_allocate', {
+        p_order_id: p.order.id,
+        p_allocations: p.allocations,
+      });
+      if (error) failed.push((p.order.slip_no || p.order.id.slice(0, 8)) + ': ' + error.message);
+      else done.push(p.order.id);
+    }
+    closeModal();
+    if (failed.length) toast('一部の伝票で引当失敗: ' + failed.join(' / '), 'error');
+    if (done.length) toast(done.length + '伝票の引当を確定し在庫を引き落としました');
+    _obBulkPlans = [];
+    await loadOutbound();
+    // 引当完了後はピッキングリストを自動出力(複数伝票を1ファイルに連結)
+    if (done.length) await obPrintPickingLists(done);
+  } finally {
+    _obBusy = false;
+  }
 }
 
 // ---------- 出荷確定 (ステータス確定のみ・在庫は引当時に控除済み) ----------
@@ -609,9 +760,18 @@ async function openObShipAllocated(orderId) {
 }
 
 async function execObShipAllocated(orderId) {
-  const { data, error } = await sb.rpc('fn_outbound_ship_allocated', { p_order_id: orderId });
-  if (error) { toast('出荷確定失敗: ' + error.message, 'error'); return; }
-  closeModal();
-  toast((data?.shipped_items || 0) + '明細を出荷済みにしました');
-  await loadOutbound();
+  if (_obBusy) return;   // 二重実行防止
+  _obBusy = true;
+  try {
+    const { data, error } = await sb.rpc('fn_outbound_ship_allocated', { p_order_id: orderId });
+    if (error) { toast('出荷確定失敗: ' + error.message, 'error'); return; }
+    closeModal();
+    toast((data?.shipped_items || 0) + '明細を出荷済みにしました');
+    await loadOutbound();
+  } finally {
+    _obBusy = false;
+  }
 }
+
+// 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
+AUTO_REFRESH_FNS.outbound = loadOutbound;

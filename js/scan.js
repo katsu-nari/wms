@@ -410,6 +410,30 @@ async function _handleStructuredQr(content, resultEl) {
       return true;
     }
 
+    // 出荷ピッキングリストのQR → 出荷確定画面を開く(携帯端末での出荷確定)
+    if (obj && obj.type === 'outbound_order' && obj.id) {
+      var { data: oorder } = await sb.from('outbound_orders')
+        .select('id, slip_no, status').eq('id', obj.id).single();
+      if (!oorder) {
+        toast('出庫データが見つかりません: ' + (obj.slip_no || obj.id), 'error');
+        if (resultEl) {
+          resultEl.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:20px;"><div style="font-weight:600;color:var(--red);margin-bottom:4px;">出庫データが見つかりません</div><div style="font-family:var(--mono);font-size:11px;color:var(--text2);">' + esc(obj.slip_no || obj.id) + '</div></div></div>';
+        }
+        return true;
+      }
+      go('outbound');
+      if (oorder.status === 'picking') {
+        if (typeof openObShipAllocated === 'function') openObShipAllocated(oorder.id);
+      } else if (oorder.status === 'shipped') {
+        toast('この出庫は出荷済みです');
+        if (typeof openObDetail === 'function') openObDetail(oorder.id);
+      } else {
+        toast('未引当の出庫です。先に引当を実施してください', 'error');
+        if (typeof openObAllocate === 'function') openObAllocate(oorder.id);
+      }
+      return true;
+    }
+
     // 商品看板のQR(商品情報入り) → JANコードで通常の商品検索フローへ
     if (obj && obj.type === 'product' && (obj.jan_code || obj.sku)) {
       var lookupCode = obj.jan_code || obj.sku;

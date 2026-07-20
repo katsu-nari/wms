@@ -984,3 +984,6 @@ async function ibPrintKanban(orderId) {
 
   _ibOpenPrintWindow('商品看板_' + slip, pages);
 }
+
+// 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
+AUTO_REFRESH_FNS.inbound = loadInbound;

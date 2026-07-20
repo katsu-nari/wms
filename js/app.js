@@ -52,6 +52,34 @@ const PAGE_TITLES = {
 
 const RENDER_FNS = {};
 
+// ---------- 自動リフレッシュ ----------
+// 複数端末(PC/携帯)での同時作業を想定し、表示中の一覧を定期的に再読込して
+// 他端末の作業進捗を反映する。各ページのJSが自ページのロード関数を登録する。
+const AUTO_REFRESH_FNS = {};
+const AUTO_REFRESH_INTERVAL_MS = 20000;
+let _autoRefreshTimer = null;
+
+function _autoRefreshTick() {
+  if (document.hidden) return;                       // 非表示タブは更新しない(負荷対策)
+  if (!App.user) return;                             // 未ログイン中は不要
+  const ov = document.getElementById('modalOverlay');
+  if (ov && ov.classList.contains('open')) return;   // モーダル操作中は入力を壊さない
+  const fn = AUTO_REFRESH_FNS[App.currentPage];
+  if (typeof fn === 'function') {
+    try { fn(); } catch (e) { console.error('auto refresh failed:', e); }
+  }
+}
+
+function startAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer = setInterval(_autoRefreshTick, AUTO_REFRESH_INTERVAL_MS);
+}
+
+// タブがアクティブに戻ったら即時更新
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) _autoRefreshTick();
+});
+
 // ---------- PIN Input Handler ----------
 function initPinInputs() {
   const pins = document.querySelectorAll('.login-pin input');
@@ -421,4 +449,6 @@ function scanBtnHtml(onclick) {
   } else {
     document.getElementById('loginPage').style.display = '';
   }
+
+  startAutoRefresh();
 })();
