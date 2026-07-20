@@ -95,6 +95,7 @@ function renderIbTable() {
           <td>${statusBadge(o.status)}</td>
           <td>
             <button class="btn btn-g btn-sm" onclick="openIbDetail('${o.id}')">詳細</button>
+            ${o.status === 'pending' && isOperator() ? `<button class="btn btn-g btn-sm" onclick="openInboundModal('${o.id}')">修正</button>` : ''}
             ${o.status !== 'done' && o.status !== 'canceled' && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openIbPutaway('${o.id}')">棚入れ</button>` : ''}
           </td>
         </tr>`;
@@ -103,8 +104,9 @@ function renderIbTable() {
 }
 
 let _ibRowSeq = 0;
+let _ibEditOrderId = null;   // 修正入力中の入荷ID（null=新規登録）
 
-async function openInboundModal() {
+async function openInboundModal(orderId) {
   const [supRes, prodRes] = await Promise.all([
     sb.from('suppliers').select('id, code, name').eq('is_active', true).order('code'),
     sb.from('products').select('id, sku, name, jan_code, cost_price, sell_price, pack_size').is('deleted_at', null).order('sku'),
@@ -112,17 +114,33 @@ async function openInboundModal() {
   _ibSuppliers = supRes.data || [];
   _ibProducts = prodRes.data || [];
   _ibRowSeq = 0;
+  _ibEditOrderId = null;
+
+  // 修正入力: 既存データを取得（棚入れ着手済みは修正不可）
+  let editOrder = null;
+  if (orderId) {
+    const { data: o, error } = await sb.from('inbound_orders')
+      .select('*, inbound_items(*)')
+      .eq('id', orderId).single();
+    if (error || !o) { toast('入荷データの取得に失敗しました', 'error'); return; }
+    if (o.status !== 'pending' || (o.inbound_items || []).some(it => (it.received_qty || 0) > 0 || it.status !== 'pending')) {
+      toast('棚入れ（入荷計上）済みの明細があるため修正できません', 'error');
+      return;
+    }
+    editOrder = o;
+    _ibEditOrderId = orderId;
+  }
 
   const supOpts = _ibSuppliers.map(s => `<option value="${s.id}">${esc(s.code)} - ${esc(s.name)}</option>`).join('');
 
   const body = `<div class="fg">
     <div class="fr">
-      <div class="fl"><div class="flbl">伝票番号</div><input class="fi" id="ib_slip" placeholder="自動採番（空可）"></div>
+      <div class="fl"><div class="flbl">伝票番号</div><input class="fi" id="ib_slip" placeholder="自動採番（空可）" value="${esc(editOrder?.slip_no || '')}"></div>
       <div class="fl"><div class="flbl">仕入先 *</div><select class="fs" id="ib_supplier"><option value="">選択してください</option>${supOpts}</select></div>
     </div>
     <div class="fr">
-      <div class="fl"><div class="flbl">入荷予定日</div><input class="fi" id="ib_date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
-      <div class="fl"><div class="flbl">備考</div><input class="fi" id="ib_note" placeholder="メモ"></div>
+      <div class="fl"><div class="flbl">入荷予定日</div><input class="fi" id="ib_date" type="date" value="${editOrder?.planned_date ? editOrder.planned_date.slice(0, 10) : new Date().toISOString().slice(0, 10)}"></div>
+      <div class="fl"><div class="flbl">備考</div><input class="fi" id="ib_note" placeholder="メモ" value="${esc(editOrder?.note || '')}"></div>
     </div>
     <hr style="border-color:var(--border);">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -150,12 +168,44 @@ async function openInboundModal() {
   </div>`;
   const footer = `
     <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-p" onclick="saveInbound()">登録</button>
+    <button class="btn btn-p" onclick="saveInbound()">${editOrder ? '修正を保存' : '登録'}</button>
   `;
-  openModal('入荷登録', body, footer, true);
+  openModal(editOrder ? '入荷修正 - ' + (editOrder.slip_no || editOrder.id.slice(0, 8)) : '入荷登録', body, footer, true);
 
-  // 初期空行を5行表示
-  for (let k = 0; k < 5; k++) ibAddRow();
+  if (editOrder) {
+    // 既存明細をプリフィル
+    document.getElementById('ib_supplier').value = editOrder.supplier_id || '';
+    const its = editOrder.inbound_items || [];
+    its.forEach(it => ibPrefillRow(it));
+    if (!its.length) ibAddRow();
+  } else {
+    // 初期空行を5行表示
+    for (let k = 0; k < 5; k++) ibAddRow();
+  }
+}
+
+// 修正入力: 既存明細を行にプリフィル
+function ibPrefillRow(it) {
+  const i = ibAddRow();
+  if (i < 0) return;
+  const prod = _ibProducts.find(p => p.id === it.product_id);
+  const janInput = document.querySelector('#ibRow' + i + ' .ib-jan');
+  if (janInput) janInput.value = prod?.jan_code || '';
+  const pnameEl = document.getElementById('ibPname' + i);
+  pnameEl.textContent = prod ? prod.name : '(商品マスタ未登録)';
+  pnameEl.style.color = prod ? 'var(--text)' : 'var(--red)';
+  document.getElementById('ibPid' + i).value = it.product_id;
+  if (it.cost_price != null) document.getElementById('ibCost' + i).value = it.cost_price;
+  if (it.sell_price != null) document.getElementById('ibSell' + i).value = it.sell_price;
+  const pack = it.pack_size || prod?.pack_size || 1;
+  let caseQ = it.case_qty || 0;
+  let pieceQ = it.piece_qty || 0;
+  // 保存値の内訳が総数と合わない場合は総数をピース数として表示
+  if (caseQ * pack + pieceQ !== it.planned_qty) { caseQ = 0; pieceQ = it.planned_qty; }
+  document.getElementById('ibPack' + i).value = pack;
+  document.getElementById('ibCase' + i).value = caseQ || '';
+  document.getElementById('ibPiece' + i).value = pieceQ || '';
+  ibCalcTotal(i);
 }
 
 function ibRowInnerHtml(i) {
@@ -280,6 +330,36 @@ async function saveInbound() {
     ? (_ibSuppliers.find(s => s.id === supplierId)?.name || null)
     : null;
 
+  // ---------- 修正入力（既存入荷の更新） ----------
+  if (_ibEditOrderId) {
+    // 保存直前に棚入れ未着手を再確認（他端末での更新に備える）
+    const { data: cur } = await sb.from('inbound_items')
+      .select('id, received_qty, status').eq('order_id', _ibEditOrderId);
+    if ((cur || []).some(it => (it.received_qty || 0) > 0 || it.status !== 'pending')) {
+      toast('棚入れ（入荷計上）が開始されたため修正できません', 'error');
+      return;
+    }
+
+    const { error: uErr } = await sb.from('inbound_orders')
+      .update({ slip_no: slip, supplier: supplierName, supplier_id: supplierId, planned_date: date, note })
+      .eq('id', _ibEditOrderId);
+    if (uErr) { toast('更新失敗: ' + uErr.message, 'error'); return; }
+
+    const { error: dErr } = await sb.from('inbound_items').delete().eq('order_id', _ibEditOrderId);
+    if (dErr) { toast('明細更新失敗: ' + dErr.message, 'error'); return; }
+
+    const { error: riErr } = await sb.from('inbound_items')
+      .insert(items.map(it => ({ order_id: _ibEditOrderId, ...it })));
+    if (riErr) { toast('明細登録失敗: ' + riErr.message, 'error'); return; }
+
+    closeModal();
+    toast('入荷を修正しました');
+    _ibEditOrderId = null;
+    await loadInbound();
+    return;
+  }
+
+  // ---------- 新規登録 ----------
   const { data: order, error: oErr } = await sb.from('inbound_orders')
     .insert({
       slip_no: slip,
@@ -409,14 +489,30 @@ async function openIbDetail(orderId) {
       </tr>`).join('')}</tbody>
     </table></div>
   `;
-  openModal('入荷詳細 ' + (order.slip_no || order.id.slice(0, 8)), body, '<button class="btn btn-g" onclick="closeModal()">閉じる</button>');
+  // フッター: 状態に応じた操作・帳票印刷ボタン
+  const canEdit = order.status === 'pending' && items.every(it => (it.received_qty || 0) === 0 && it.status === 'pending');
+  const hasReceived = items.some(it => (it.received_qty || 0) > 0);
+  let footer = '';
+  if (isOperator()) {
+    if (canEdit) footer += `<button class="btn btn-g" onclick="closeModal();openInboundModal('${order.id}')">修正</button>`;
+    footer += `<button class="btn btn-g" onclick="ibPrintInspectionList('${order.id}')">検品リスト印刷</button>`;
+    if (hasReceived) {
+      footer += `<button class="btn btn-g" onclick="ibPrintReceivingList('${order.id}')">計上リスト印刷</button>`;
+      footer += `<button class="btn btn-g" onclick="ibPrintKanban('${order.id}')">商品看板印刷</button>`;
+    }
+  }
+  footer += '<button class="btn btn-g" onclick="closeModal()">閉じる</button>';
+  openModal('入荷詳細 ' + (order.slip_no || order.id.slice(0, 8)), body, footer);
 }
+
+let _ibPutawayOrderId = null;  // 棚入れ中の入荷ID（完了後の帳票印刷に使用）
 
 async function openIbPutaway(orderId) {
   const { data: order } = await sb.from('inbound_orders')
     .select('*, inbound_items(*, products(sku, name))')
     .eq('id', orderId).single();
   if (!order) return;
+  _ibPutawayOrderId = orderId;
 
   const pending = (order.inbound_items || []).filter(it => it.status !== 'done');
   if (!pending.length) { toast('全明細が完了済みです'); return; }
@@ -468,6 +564,267 @@ async function execPutaway() {
     ok++;
   }
   closeModal();
-  toast(ok + '行の棚入れを完了しました');
+  toast(ok + '行の入荷計上を完了しました');
   await loadInbound();
+
+  // 計上完了後: 帳票印刷の案内モーダル
+  const oid = _ibPutawayOrderId;
+  if (oid && ok > 0) {
+    openModal('入荷計上 完了',
+      '<div style="text-align:center;padding:12px 0;">'
+        + '<div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--green);">✓ ' + ok + '行の入荷計上が完了しました</div>'
+        + '<div style="font-size:12px;color:var(--text2);">続けて帳票を印刷できます</div>'
+      + '</div>',
+      '<button class="btn btn-g" onclick="closeModal()">閉じる</button>'
+      + `<button class="btn btn-g" onclick="ibPrintReceivingList('${oid}')">入荷計上リスト</button>`
+      + `<button class="btn btn-p" onclick="ibPrintKanban('${oid}')">商品看板</button>`);
+  }
+}
+
+// =====================================================================
+// 帳票印刷 (A4)
+//   ・入荷検品リスト  : QR付き。QRスキャンで棚入れ(入荷計上)画面へ
+//   ・入荷計上リスト  : 計上実績の一覧
+//   ・商品看板        : 商品ごと1枚。商品情報入りQR付き
+// =====================================================================
+
+// A4印刷用の共通CSS
+const _IB_PRINT_CSS = `
+@page { size: A4; margin: 12mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; font-size: 12px; color: #111; }
+.sheet { page-break-after: always; }
+.sheet:last-child { page-break-after: auto; }
+.hd { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #111; padding-bottom: 8px; margin-bottom: 10px; }
+h1 { font-size: 21px; letter-spacing: .1em; }
+.meta { font-size: 11.5px; line-height: 1.8; }
+.meta b { display: inline-block; min-width: 72px; color: #444; font-weight: 500; }
+.qr { image-rendering: pixelated; border: 1px solid #999; }
+.qr-cap { font-size: 9px; color: #555; text-align: center; margin-top: 3px; }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+th, td { border: 1px solid #444; padding: 6px 7px; font-size: 11px; text-align: left; }
+th { background: #ececec; font-weight: 600; }
+td.num, th.num { text-align: right; font-family: "Courier New", monospace; }
+.mono { font-family: "Courier New", monospace; }
+.chk { width: 34px; text-align: center; font-size: 14px; }
+.fillbox { min-width: 58px; }
+.sig { margin-top: 22px; display: flex; gap: 14px; justify-content: flex-end; }
+.sigbox { border: 1px solid #444; width: 110px; height: 62px; font-size: 10px; text-align: center; padding-top: 4px; color: #555; }
+.foot { margin-top: 12px; font-size: 9.5px; color: #666; display: flex; justify-content: space-between; }
+/* 商品看板 */
+.kanban { page-break-after: always; border: 4px solid #111; height: 262mm; padding: 14mm 12mm; display: flex; flex-direction: column; }
+.kanban:last-child { page-break-after: auto; }
+.kb-tag { font-size: 13px; letter-spacing: .3em; border: 1.5px solid #111; display: inline-block; padding: 3px 14px; }
+.kb-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10mm; }
+.kb-date { font-size: 12px; color: #333; text-align: right; line-height: 1.7; }
+.kb-name { font-size: 38px; font-weight: 800; line-height: 1.3; margin-bottom: 6mm; word-break: break-all; }
+.kb-code { font-family: "Courier New", monospace; font-size: 17px; color: #222; margin-bottom: 10mm; line-height: 1.9; }
+.kb-qty { display: flex; align-items: baseline; gap: 14px; border-top: 2px solid #111; border-bottom: 2px solid #111; padding: 8mm 0; margin-bottom: 8mm; }
+.kb-qty-num { font-size: 64px; font-weight: 800; font-family: "Courier New", monospace; }
+.kb-qty-sub { font-size: 15px; color: #333; }
+.kb-loc { font-size: 15px; margin-bottom: 4mm; }
+.kb-loc b { font-size: 26px; font-family: "Courier New", monospace; margin-left: 10px; }
+.kb-bottom { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; }
+.kb-sup { font-size: 13px; color: #333; line-height: 1.8; }
+`;
+
+// 印刷ウィンドウを開いて印刷ダイアログを表示
+function _ibOpenPrintWindow(title, bodyHtml) {
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました。ブラウザの設定で許可してください', 'error'); return; }
+  w.document.write('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>' + esc(title) + '</title>'
+    + '<style>' + _IB_PRINT_CSS + '</style></head><body>' + bodyHtml
+    + '<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 350); };<\/script>'
+    + '</body></html>');
+  w.document.close();
+}
+
+// 帳票用に入荷データ一式を取得
+async function _ibFetchOrderForPrint(orderId) {
+  const { data: order, error } = await sb.from('inbound_orders')
+    .select('*, suppliers(code, name), inbound_items(*, products(sku, name, jan_code, unit), locations(code))')
+    .eq('id', orderId).single();
+  if (error || !order) { toast('入荷データの取得に失敗しました', 'error'); return null; }
+  return order;
+}
+
+// ---------- ② 入荷検品リスト (A4・QR付き) ----------
+async function ibPrintInspectionList(orderId) {
+  const order = await _ibFetchOrderForPrint(orderId);
+  if (!order) return;
+  const items = order.inbound_items || [];
+  const supplierName = order.suppliers?.name || order.supplier || '—';
+  const supplierCode = order.suppliers?.code || '';
+  const slip = order.slip_no || order.id.slice(0, 8);
+
+  // このQRをスキャン画面で読むと棚入れ(入荷計上)画面が開く
+  const qrContent = JSON.stringify({ type: 'inbound_order', id: order.id, slip_no: order.slip_no || '' });
+  const qrImg = _generateQrDataUrl(qrContent, 6);
+
+  const rows = items.map((it, i) => {
+    const p = it.products || {};
+    return '<tr>'
+      + '<td class="num">' + (i + 1) + '</td>'
+      + '<td class="mono">' + esc(p.jan_code || p.sku || '') + '</td>'
+      + '<td>' + esc(p.name || '') + '</td>'
+      + '<td class="num">' + (it.pack_size || 1) + '</td>'
+      + '<td class="num">' + (it.case_qty || 0) + '</td>'
+      + '<td class="num">' + (it.piece_qty || 0) + '</td>'
+      + '<td class="num"><strong>' + it.planned_qty.toLocaleString() + '</strong></td>'
+      + '<td class="fillbox">&nbsp;</td>'
+      + '<td class="chk">□</td>'
+      + '</tr>';
+  }).join('');
+
+  const totalQty = items.reduce((s, it) => s + (it.planned_qty || 0), 0);
+
+  const body = '<div class="sheet">'
+    + '<div class="hd">'
+      + '<div>'
+        + '<h1>入荷検品リスト</h1>'
+        + '<div class="meta" style="margin-top:8px;">'
+          + '<div><b>伝票番号</b> <span class="mono">' + esc(slip) + '</span></div>'
+          + '<div><b>入荷先</b> ' + esc(supplierName) + (supplierCode ? ' <span class="mono">(' + esc(supplierCode) + ')</span>' : '') + '</div>'
+          + '<div><b>入荷予定日</b> ' + fmtDate(order.planned_date) + '</div>'
+          + (order.note ? '<div><b>備考</b> ' + esc(order.note) + '</div>' : '')
+        + '</div>'
+      + '</div>'
+      + '<div style="text-align:center;">'
+        + (qrImg ? '<img class="qr" src="' + qrImg + '" style="width:32mm;height:32mm;">' : '')
+        + '<div class="qr-cap">スキャンで入荷計上画面へ</div>'
+      + '</div>'
+    + '</div>'
+    + '<table><thead><tr>'
+      + '<th class="num" style="width:26px;">No</th><th style="width:110px;">JAN/コード</th><th>商品名</th>'
+      + '<th class="num" style="width:40px;">入数</th><th class="num" style="width:48px;">ケース</th><th class="num" style="width:48px;">ピース</th>'
+      + '<th class="num" style="width:60px;">予定数</th><th style="width:58px;">検品数</th><th class="chk">✓</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody>'
+    + '<tfoot><tr><th colspan="6" style="text-align:right;">合計</th><th class="num">' + totalQty.toLocaleString() + '</th><th></th><th></th></tr></tfoot></table>'
+    + '<div class="sig">'
+      + '<div class="sigbox">検品者</div>'
+      + '<div class="sigbox">確認者</div>'
+    + '</div>'
+    + '<div class="foot"><span>SUPEREX LogiStation</span><span>出力: ' + new Date().toLocaleString('ja-JP') + '</span></div>'
+  + '</div>';
+
+  _ibOpenPrintWindow('入荷検品リスト_' + slip, body);
+}
+
+// ---------- ③-1 入荷計上リスト (A4) ----------
+async function ibPrintReceivingList(orderId) {
+  const order = await _ibFetchOrderForPrint(orderId);
+  if (!order) return;
+  const items = (order.inbound_items || []).filter(it => (it.received_qty || 0) > 0);
+  if (!items.length) { toast('計上済みの明細がありません', 'error'); return; }
+  const supplierName = order.suppliers?.name || order.supplier || '—';
+  const slip = order.slip_no || order.id.slice(0, 8);
+
+  const qrContent = JSON.stringify({ type: 'inbound_order', id: order.id, slip_no: order.slip_no || '' });
+  const qrImg = _generateQrDataUrl(qrContent, 6);
+
+  const rows = items.map((it, i) => {
+    const p = it.products || {};
+    const diff = (it.received_qty || 0) - it.planned_qty;
+    return '<tr>'
+      + '<td class="num">' + (i + 1) + '</td>'
+      + '<td class="mono">' + esc(p.jan_code || p.sku || '') + '</td>'
+      + '<td>' + esc(p.name || '') + '</td>'
+      + '<td class="num">' + it.planned_qty.toLocaleString() + '</td>'
+      + '<td class="num"><strong>' + (it.received_qty || 0).toLocaleString() + '</strong></td>'
+      + '<td class="num">' + (diff === 0 ? '±0' : (diff > 0 ? '+' + diff : diff)) + '</td>'
+      + '<td class="mono">' + esc(it.locations?.code || '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const totalPlanned = items.reduce((s, it) => s + (it.planned_qty || 0), 0);
+  const totalReceived = items.reduce((s, it) => s + (it.received_qty || 0), 0);
+
+  const body = '<div class="sheet">'
+    + '<div class="hd">'
+      + '<div>'
+        + '<h1>入荷計上リスト</h1>'
+        + '<div class="meta" style="margin-top:8px;">'
+          + '<div><b>伝票番号</b> <span class="mono">' + esc(slip) + '</span></div>'
+          + '<div><b>入荷先</b> ' + esc(supplierName) + '</div>'
+          + '<div><b>入荷予定日</b> ' + fmtDate(order.planned_date) + '</div>'
+          + '<div><b>計上日時</b> ' + new Date().toLocaleString('ja-JP') + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<div style="text-align:center;">'
+        + (qrImg ? '<img class="qr" src="' + qrImg + '" style="width:28mm;height:28mm;">' : '')
+        + '<div class="qr-cap">入荷伝票QR</div>'
+      + '</div>'
+    + '</div>'
+    + '<table><thead><tr>'
+      + '<th class="num" style="width:26px;">No</th><th style="width:110px;">JAN/コード</th><th>商品名</th>'
+      + '<th class="num" style="width:60px;">予定数</th><th class="num" style="width:60px;">計上数</th>'
+      + '<th class="num" style="width:50px;">差異</th><th style="width:80px;">格納ロケ</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody>'
+    + '<tfoot><tr><th colspan="3" style="text-align:right;">合計</th>'
+      + '<th class="num">' + totalPlanned.toLocaleString() + '</th>'
+      + '<th class="num">' + totalReceived.toLocaleString() + '</th>'
+      + '<th class="num">' + (totalReceived - totalPlanned === 0 ? '±0' : (totalReceived - totalPlanned > 0 ? '+' : '') + (totalReceived - totalPlanned)) + '</th><th></th></tr></tfoot></table>'
+    + '<div class="sig">'
+      + '<div class="sigbox">計上者</div>'
+      + '<div class="sigbox">承認者</div>'
+    + '</div>'
+    + '<div class="foot"><span>SUPEREX LogiStation</span><span>出力: ' + new Date().toLocaleString('ja-JP') + '</span></div>'
+  + '</div>';
+
+  _ibOpenPrintWindow('入荷計上リスト_' + slip, body);
+}
+
+// ---------- ③-2 商品看板 (商品ごと1枚・商品情報QR付き) ----------
+async function ibPrintKanban(orderId) {
+  const order = await _ibFetchOrderForPrint(orderId);
+  if (!order) return;
+  // 計上済み明細を優先、なければ全明細（事前貼付け用）
+  let items = (order.inbound_items || []).filter(it => (it.received_qty || 0) > 0);
+  if (!items.length) items = order.inbound_items || [];
+  if (!items.length) { toast('明細がありません', 'error'); return; }
+  const supplierName = order.suppliers?.name || order.supplier || '—';
+  const slip = order.slip_no || order.id.slice(0, 8);
+
+  const pages = items.map(it => {
+    const p = it.products || {};
+    const qty = (it.received_qty || 0) > 0 ? it.received_qty : it.planned_qty;
+    const pack = it.pack_size || 1;
+    const caseQ = pack > 1 ? Math.floor(qty / pack) : 0;
+    const pieceQ = pack > 1 ? qty % pack : qty;
+
+    // 商品情報入りQR
+    const qrContent = JSON.stringify({
+      type: 'product',
+      jan_code: p.jan_code || '',
+      sku: p.sku || '',
+      name: p.name || '',
+      qty: qty,
+    });
+    const qrImg = _generateQrDataUrl(qrContent, 6);
+
+    return '<div class="kanban">'
+      + '<div class="kb-head">'
+        + '<span class="kb-tag">商品看板</span>'
+        + '<div class="kb-date">入荷日: ' + fmtDate(order.planned_date) + '<br>伝票: <span class="mono">' + esc(slip) + '</span></div>'
+      + '</div>'
+      + '<div class="kb-name">' + esc(p.name || '(商品名未設定)') + '</div>'
+      + '<div class="kb-code">SKU: ' + esc(p.sku || '—') + '<br>JAN: ' + esc(p.jan_code || '—') + '</div>'
+      + '<div class="kb-qty">'
+        + '<span class="kb-qty-num">' + qty.toLocaleString() + '</span>'
+        + '<span class="kb-qty-sub">' + esc(p.unit || '個')
+          + (pack > 1 ? '（入数' + pack + ' × ' + caseQ + 'ケース' + (pieceQ > 0 ? ' ＋ バラ' + pieceQ : '') + '）' : '')
+        + '</span>'
+      + '</div>'
+      + '<div class="kb-loc">格納ロケーション<b>' + esc(it.locations?.code || '未定') + '</b></div>'
+      + '<div class="kb-bottom">'
+        + '<div class="kb-sup">入荷先: ' + esc(supplierName) + '<br><span style="font-size:10px;color:#777;">SUPEREX LogiStation / ' + new Date().toLocaleString('ja-JP') + '</span></div>'
+        + '<div style="text-align:center;">'
+          + (qrImg ? '<img class="qr" src="' + qrImg + '" style="width:40mm;height:40mm;">' : '')
+          + '<div class="qr-cap">商品情報QR</div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+
+  _ibOpenPrintWindow('商品看板_' + slip, pages);
 }

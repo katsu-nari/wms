@@ -321,6 +321,36 @@ function downloadCSV(filename, header, rows) {
 function isAdmin() { return App.role === 'admin'; }
 function isOperator() { return App.role === 'admin' || App.role === 'operator'; }
 
+// QRコードをdata URLとして生成（qrcode-generatorライブラリ使用）
+// locations.js のロケーションQR・入荷帳票のQRで共用
+function _generateQrDataUrl(text, cellSize) {
+  try {
+    var qr = qrcode(0, 'H');
+    qr.addData(text);
+    qr.make();
+    var size = qr.getModuleCount();
+    var cs = cellSize || 8;
+    var canvas = document.createElement('canvas');
+    canvas.width = size * cs;
+    canvas.height = size * cs;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    for (var row = 0; row < size; row++) {
+      for (var col = 0; col < size; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(col * cs, row * cs, cs, cs);
+        }
+      }
+    }
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('QR generation failed:', e);
+    return null;
+  }
+}
+
 // ---------- Barcode Scanner ----------
 let _scanCallback = null;
 

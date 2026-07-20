@@ -388,6 +388,34 @@ async function _handleStructuredQr(content, resultEl) {
       }
       return true;
     }
+
+    // 入荷検品リストのQR → 入荷計上(棚入れ)画面を開く
+    if (obj && obj.type === 'inbound_order' && obj.id) {
+      var { data: order } = await sb.from('inbound_orders')
+        .select('id, slip_no, status').eq('id', obj.id).single();
+      if (!order) {
+        toast('入荷データが見つかりません: ' + (obj.slip_no || obj.id), 'error');
+        if (resultEl) {
+          resultEl.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:20px;"><div style="font-weight:600;color:var(--red);margin-bottom:4px;">入荷データが見つかりません</div><div style="font-family:var(--mono);font-size:11px;color:var(--text2);">' + esc(obj.slip_no || obj.id) + '</div></div></div>';
+        }
+        return true;
+      }
+      go('inbound');
+      if (order.status === 'done') {
+        toast('この入荷は計上済みです');
+        if (typeof openIbDetail === 'function') openIbDetail(order.id);
+      } else if (typeof openIbPutaway === 'function') {
+        openIbPutaway(order.id);
+      }
+      return true;
+    }
+
+    // 商品看板のQR(商品情報入り) → JANコードで通常の商品検索フローへ
+    if (obj && obj.type === 'product' && (obj.jan_code || obj.sku)) {
+      var lookupCode = obj.jan_code || obj.sku;
+      await onScanResult(String(lookupCode), null);
+      return true;
+    }
   } catch (e) {}
   return false;
 }
