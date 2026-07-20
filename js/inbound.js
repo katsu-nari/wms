@@ -726,7 +726,7 @@ async function execPutaway() {
 
 // A4印刷用の共通CSS
 const _IB_PRINT_CSS = `
-@page { size: A4 landscape; margin: 10mm 12mm; }
+@page { size: 297mm 210mm; margin: 10mm 12mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; font-size: 12px; color: #111; }
 .sheet { page-break-after: always; }
@@ -770,14 +770,22 @@ td.emph.num { font-size: 16px; }
 `;
 
 // 印刷ウィンドウを開いて印刷ダイアログを表示
+// Blob URL方式: about:blank + document.write では @page(横向き指定) が
+// 反映されないブラウザがあるため、正規のHTML文書として読み込ませる。
 function _ibOpenPrintWindow(title, bodyHtml) {
-  const w = window.open('', '_blank');
-  if (!w) { toast('ポップアップがブロックされました。ブラウザの設定で許可してください', 'error'); return; }
-  w.document.write('<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>' + esc(title) + '</title>'
+  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>' + esc(title) + '</title>'
     + '<style>' + _IB_PRINT_CSS + '</style></head><body>' + bodyHtml
-    + '<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 350); };<\/script>'
-    + '</body></html>');
-  w.document.close();
+    + '<script>window.addEventListener("load", function(){ setTimeout(function(){ window.print(); }, 300); });<\/script>'
+    + '</body></html>';
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank');
+  if (!w) {
+    URL.revokeObjectURL(url);
+    toast('ポップアップがブロックされました。ブラウザの設定で許可してください', 'error');
+    return;
+  }
+  setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
 }
 
 // 帳票用に入荷データ一式を取得

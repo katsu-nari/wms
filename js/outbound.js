@@ -14,6 +14,16 @@ RENDER_FNS.outbound = async function renderOutbound() {
       </div>
       ${isOperator() ? '<button class="btn btn-p" onclick="openOutboundModal()">+ 出庫登録</button>' : ''}
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;flex-wrap:wrap;">
+      <div class="sbar" style="max-width:340px;flex:1;min-width:180px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="obSearch" value="${esc(_obSearch)}" placeholder="出荷先コード / 伝票番号 で検索..." oninput="filterOutbound()">
+      </div>
+      <input class="fi" id="obDateFrom" placeholder="開始日 例:6/5" style="width:108px;font-size:12px;" value="${_obDateFrom ? _obDateFrom.replace(/-/g, '/') : ''}" onchange="obDateRangeChanged()">
+      <span style="color:var(--text2);">〜</span>
+      <input class="fi" id="obDateTo" placeholder="終了日 例:6/30" style="width:108px;font-size:12px;" value="${_obDateTo ? _obDateTo.replace(/-/g, '/') : ''}" onchange="obDateRangeChanged()">
+      <button class="btn btn-g btn-sm" onclick="clearOutboundSearch()">クリア</button>
+    </div>
     <div class="card"><div class="tw"><table>
       <thead><tr><th>伝票No</th><th class="hm">出荷先</th><th>予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
       <tbody id="obTb"></tbody>
@@ -24,6 +34,9 @@ RENDER_FNS.outbound = async function renderOutbound() {
 
 let _obOrders = [];
 let _obTabFilter = 'all';
+let _obSearch = '';
+let _obDateFrom = '';   // 検索範囲 開始日 (ISO)
+let _obDateTo = '';     // 検索範囲 終了日 (ISO)
 let _obProducts = [];
 let _obClients = [];
 
@@ -34,9 +47,35 @@ function setObTab(tab, tabEl) {
   renderObTable();
 }
 
+function filterOutbound() {
+  _obSearch = (document.getElementById('obSearch')?.value || '').trim();
+  renderObTable();
+}
+
+function clearOutboundSearch() {
+  _obSearch = '';
+  _obDateFrom = '';
+  _obDateTo = '';
+  ['obSearch', 'obDateFrom', 'obDateTo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderObTable();
+}
+
+// 短縮日付変換(ibApplyShortDate/ibParseShortDate)は inbound.js の共通関数を利用
+function obDateRangeChanged() {
+  _obDateFrom = ibApplyShortDate(document.getElementById('obDateFrom')) || '';
+  _obDateTo = ibApplyShortDate(document.getElementById('obDateTo')) || '';
+  if (_obDateFrom && _obDateTo && _obDateFrom > _obDateTo) {
+    toast('開始日が終了日より後になっています', 'error');
+  }
+  renderObTable();
+}
+
 async function loadOutbound() {
   const { data, error } = await sb.from('outbound_orders')
-    .select('*, outbound_items(id, product_id, planned_qty, picked_qty, status), clients(name)')
+    .select('*, outbound_items(id, product_id, planned_qty, picked_qty, status), clients(name, code)')
     .order('created_at', { ascending: false });
   if (error) { toast('出庫一覧の読み込みに失敗しました: ' + error.message, 'error'); }
   _obOrders = data || [];
@@ -46,6 +85,20 @@ async function loadOutbound() {
 function renderObTable() {
   let filtered = _obOrders;
   if (_obTabFilter !== 'all') filtered = filtered.filter(o => o.status === _obTabFilter);
+  // 検索: 出荷予定日 / 出荷先コード / 伝票番号 のいずれかに部分一致
+  const q = (_obSearch || '').toLowerCase();
+  if (q) {
+    filtered = filtered.filter(o => {
+      const slip = (o.slip_no || '').toLowerCase();
+      const date = (o.planned_date || '').toLowerCase();
+      const cliCode = (o.clients?.code || '').toLowerCase();
+      const cliName = (o.clients?.name || o.customer || '').toLowerCase();
+      return slip.includes(q) || date.includes(q) || cliCode.includes(q) || cliName.includes(q);
+    });
+  }
+  // 日付範囲検索: 開始日〜終了日
+  if (_obDateFrom) filtered = filtered.filter(o => o.planned_date && o.planned_date.slice(0, 10) >= _obDateFrom);
+  if (_obDateTo) filtered = filtered.filter(o => o.planned_date && o.planned_date.slice(0, 10) <= _obDateTo);
   const tb = document.getElementById('obTb');
   if (!tb) return;
   tb.innerHTML = filtered.length
@@ -65,7 +118,7 @@ function renderObTable() {
           </td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="7" class="empty-state">出庫データがありません</td></tr>';
+    : `<tr><td colspan="7" class="empty-state">${(_obSearch || _obDateFrom || _obDateTo || _obTabFilter !== 'all') ? '該当する出庫データがありません' : '出庫データがありません'}</td></tr>`;
 }
 
 async function openOutboundModal() {
