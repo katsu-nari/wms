@@ -10,6 +10,7 @@ RENDER_FNS.outbound = async function renderOutbound() {
       <div class="tabs" id="obTabs" style="max-width:400px;">
         <div class="tab active" onclick="setObTab('all',this)">全て</div>
         <div class="tab" onclick="setObTab('pending',this)">指示待ち</div>
+        <div class="tab" onclick="setObTab('picking',this)">引当済</div>
         <div class="tab" onclick="setObTab('shipped',this)">出荷済</div>
       </div>
       ${isOperator() ? '<button class="btn btn-p" onclick="openOutboundModal()">+ 出庫登録</button>' : ''}
@@ -114,7 +115,8 @@ function renderObTable() {
           <td>${statusBadge(o.status)}</td>
           <td>
             <button class="btn btn-g btn-sm" onclick="openObDetail('${o.id}')">詳細</button>
-            ${o.status !== 'shipped' && o.status !== 'canceled' && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openObPick('${o.id}')">ピック</button>` : ''}
+            ${o.status === 'pending' && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openObAllocate('${o.id}')">引当</button><button class="btn btn-g btn-sm" onclick="openObPick('${o.id}')">ピック</button>` : ''}
+            ${o.status === 'picking' && isOperator() ? `<button class="btn btn-p btn-sm" onclick="openObShipAllocated('${o.id}')">出荷</button><button class="btn btn-g btn-sm" onclick="obUnallocate('${o.id}')">解除</button>` : ''}
           </td>
         </tr>`;
       }).join('')
@@ -337,5 +339,229 @@ async function execPick() {
   }
   closeModal();
   toast(ok + '行のピッキングを完了しました');
+  await loadOutbound();
+}
+
+// =====================================================================
+// 出荷引当 (在庫引当)
+//   指示待ちの出庫明細に対し、ロット/ロケーション別の在庫を引き当てる。
+//   確定で inventory.locked_qty を確保し、伝票は「引当済(picking)」へ。
+//   引当済伝票は「出荷」で在庫控除、「解除」でロック返却。
+// =====================================================================
+
+let _obAllocItems = [];        // 引当対象明細
+let _obAllocCandidates = {};   // product_id → 利用可能在庫行[]
+let _obAllocRowSeq = 0;
+
+async function openObAllocate(orderId) {
+  const { data: order, error } = await sb.from('outbound_orders')
+    .select('*, outbound_items(*, products(sku, name, jan_code))')
+    .eq('id', orderId).single();
+  if (error || !order) { toast('出庫データの取得に失敗しました', 'error'); return; }
+  if (order.status !== 'pending') { toast('指示待ちの出庫のみ引当できます', 'error'); return; }
+
+  const items = (order.outbound_items || []).filter(it => it.status !== 'shipped');
+  if (!items.length) { toast('引当対象の明細がありません', 'error'); return; }
+
+  // 対象商品の利用可能在庫を取得（期限昇順→ロケコード順のFIFO）
+  const productIds = [...new Set(items.map(it => it.product_id))];
+  const { data: invRows } = await sb.from('v_inventory_with_names')
+    .select('id, product_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
+    .in('product_id', productIds)
+    .gt('available_qty', 0);
+
+  _obAllocCandidates = {};
+  (invRows || []).forEach(r => {
+    (_obAllocCandidates[r.product_id] = _obAllocCandidates[r.product_id] || []).push(r);
+  });
+  Object.values(_obAllocCandidates).forEach(list => list.sort((a, b) => {
+    const ea = a.expiry || '9999-12-31', eb = b.expiry || '9999-12-31';
+    if (ea !== eb) return ea < eb ? -1 : 1;
+    return (a.location_code || '').localeCompare(b.location_code || '');
+  }));
+
+  _obAllocItems = items;
+  _obAllocRowSeq = 0;
+
+  // FIFO自動引当（同一商品が複数明細にある場合の取り合いも考慮）
+  const usedMap = {};   // inventory_id → このモーダル内での使用数
+  const autoPlan = {};  // item_id → [{inv, qty}]
+  items.forEach(it => {
+    let remaining = it.planned_qty;
+    autoPlan[it.id] = [];
+    (_obAllocCandidates[it.product_id] || []).forEach(inv => {
+      if (remaining <= 0) return;
+      const avail = inv.available_qty - (usedMap[inv.id] || 0);
+      if (avail <= 0) return;
+      const take = Math.min(avail, remaining);
+      autoPlan[it.id].push({ inv, qty: take });
+      usedMap[inv.id] = (usedMap[inv.id] || 0) + take;
+      remaining -= take;
+    });
+  });
+
+  const blocks = items.map(it => {
+    const p = it.products || {};
+    const shortage = it.planned_qty - autoPlan[it.id].reduce((s, a) => s + a.qty, 0);
+    return `<div class="ob-alloc-item" data-item-id="${it.id}" data-product-id="${it.product_id}" data-planned="${it.planned_qty}" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+        <div><strong>${esc(p.name || '')}</strong> <span style="font-family:var(--mono);font-size:11px;color:var(--text2);">${esc(p.jan_code || p.sku || '')}</span></div>
+        <div style="font-size:12px;">必要数: <strong style="font-family:var(--mono);">${it.planned_qty}</strong></div>
+      </div>
+      <div id="obAllocRows-${it.id}"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <button class="btn btn-g btn-sm" onclick="obAddAllocRow('${it.id}')">＋ 割当行追加</button>
+        <div style="font-size:12px;">引当計: <strong id="obAllocSum-${it.id}" style="font-family:var(--mono);">0</strong> / ${it.planned_qty}</div>
+      </div>
+      ${shortage > 0 ? `<div style="margin-top:6px;font-size:11px;color:var(--red);">⚠ 利用可能在庫が${shortage}個不足しています（不足分は引当されません）</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const body = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+      期限の近い在庫から自動引当しています。割当行は変更できます。</div>${blocks}`;
+  const footer = `
+    <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-p" onclick="execObAllocate('${order.id}')">引当確定</button>
+  `;
+  openModal('出荷引当 - ' + (order.slip_no || order.id.slice(0, 8)), body, footer, true);
+
+  // 自動引当結果を行として展開
+  items.forEach(it => {
+    autoPlan[it.id].forEach(a => obAddAllocRow(it.id, a.inv.id, a.qty));
+    if (!autoPlan[it.id].length) obAddAllocRow(it.id);
+    obUpdateAllocSum(it.id);
+  });
+}
+
+function obAllocOptionsHtml(productId, selectedInvId) {
+  return (_obAllocCandidates[productId] || []).map(inv =>
+    `<option value="${inv.id}"${inv.id === selectedInvId ? ' selected' : ''}>`
+      + esc(inv.location_code) + ' / ' + (esc(inv.lot_no) || 'ロット無') + ' / '
+      + (inv.expiry ? esc(String(inv.expiry).slice(0, 10)) : '期限無') + ' / 可用' + inv.available_qty
+    + '</option>').join('');
+}
+
+function obAddAllocRow(itemId, invId, qty) {
+  const wrap = document.getElementById('obAllocRows-' + itemId);
+  if (!wrap) return;
+  const block = wrap.closest('.ob-alloc-item');
+  const productId = block.dataset.productId;
+  if (!(_obAllocCandidates[productId] || []).length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--red);">利用可能在庫がありません</div>';
+    return;
+  }
+  const rowId = 'obAllocRow' + (_obAllocRowSeq++);
+  const div = document.createElement('div');
+  div.id = rowId;
+  div.className = 'ob-alloc-row';
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;';
+  div.innerHTML = `
+    <select class="fs oba-inv" style="flex:1;font-size:11px;padding:5px 6px;">${obAllocOptionsHtml(productId, invId)}</select>
+    <input class="fi oba-qty" type="number" min="0" value="${qty || ''}" style="width:76px;font-size:11px;padding:5px 6px;" oninput="obUpdateAllocSum('${itemId}')">
+    <button class="btn btn-g btn-sm" style="padding:2px 7px;" onclick="document.getElementById('${rowId}').remove();obUpdateAllocSum('${itemId}')" title="行を削除">×</button>
+  `;
+  wrap.appendChild(div);
+}
+
+function obUpdateAllocSum(itemId) {
+  const wrap = document.getElementById('obAllocRows-' + itemId);
+  const sumEl = document.getElementById('obAllocSum-' + itemId);
+  if (!wrap || !sumEl) return;
+  let sum = 0;
+  wrap.querySelectorAll('.oba-qty').forEach(el => { sum += parseInt(el.value) || 0; });
+  sumEl.textContent = sum;
+  const block = wrap.closest('.ob-alloc-item');
+  const planned = parseInt(block.dataset.planned) || 0;
+  sumEl.style.color = sum === planned ? 'var(--green)' : (sum > planned ? 'var(--red)' : 'var(--yellow)');
+}
+
+async function execObAllocate(orderId) {
+  const allocations = [];
+  const overAlloc = [];
+  const usedByInv = {};
+  document.querySelectorAll('.ob-alloc-item').forEach(block => {
+    const itemId = block.dataset.itemId;
+    const planned = parseInt(block.dataset.planned) || 0;
+    let sum = 0;
+    block.querySelectorAll('.ob-alloc-row').forEach(row => {
+      const invId = row.querySelector('.oba-inv')?.value;
+      const qty = parseInt(row.querySelector('.oba-qty')?.value) || 0;
+      if (!invId || qty <= 0) return;
+      allocations.push({ item_id: itemId, inventory_id: invId, qty });
+      usedByInv[invId] = (usedByInv[invId] || 0) + qty;
+      sum += qty;
+    });
+    if (sum > planned) overAlloc.push(block);
+  });
+
+  if (!allocations.length) { toast('引当行を入力してください', 'error'); return; }
+  if (overAlloc.length) { toast('必要数を超えて引当されている明細があります', 'error'); return; }
+
+  // 同一在庫行の合計が利用可能数を超えないかクライアント側でも確認
+  const allCand = Object.values(_obAllocCandidates).flat();
+  for (const invId in usedByInv) {
+    const inv = allCand.find(c => c.id === invId);
+    if (inv && usedByInv[invId] > inv.available_qty) {
+      toast('在庫行の利用可能数を超えています: ' + inv.location_code + ' / ' + (inv.lot_no || 'ロット無'), 'error');
+      return;
+    }
+  }
+
+  const { error } = await sb.rpc('fn_outbound_allocate', {
+    p_order_id: orderId,
+    p_allocations: allocations,
+  });
+  if (error) { toast('引当失敗: ' + error.message, 'error'); return; }
+
+  closeModal();
+  toast('引当を確定しました');
+  await loadOutbound();
+}
+
+async function obUnallocate(orderId) {
+  if (!confirm('この出庫の引当を解除しますか？（確保した在庫が解放されます）')) return;
+  const { error } = await sb.rpc('fn_outbound_unallocate', { p_order_id: orderId });
+  if (error) { toast('引当解除失敗: ' + error.message, 'error'); return; }
+  toast('引当を解除しました');
+  await loadOutbound();
+}
+
+async function openObShipAllocated(orderId) {
+  const { data: order } = await sb.from('outbound_orders')
+    .select('*, outbound_items(*, products(sku, name), outbound_allocations(qty, inventory(id, lot_no, expiry, locations(code))))')
+    .eq('id', orderId).single();
+  if (!order) { toast('出庫データの取得に失敗しました', 'error'); return; }
+
+  const rows = (order.outbound_items || []).flatMap(it =>
+    (it.outbound_allocations || []).map(a => `<tr>
+      <td>${esc(it.products?.name || '')}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${esc(a.inventory?.locations?.code || '—')}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${esc(a.inventory?.lot_no) || '—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;">${a.inventory?.expiry ? String(a.inventory.expiry).slice(0, 10) : '—'}</td>
+      <td style="font-family:var(--mono);text-align:right;font-weight:700;">${a.qty}</td>
+    </tr>`)
+  ).join('');
+
+  if (!rows) { toast('引当がありません', 'error'); return; }
+
+  const body = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">以下の引当内容で在庫から出荷計上します。</div>
+    <div class="tw"><table>
+      <thead><tr><th>商品名</th><th>ロケ</th><th>ロット</th><th>期限</th><th style="text-align:right;">数量</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
+  const footer = `
+    <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
+    <button class="btn btn-p" onclick="execObShipAllocated('${order.id}')">出荷確定</button>
+  `;
+  openModal('出荷確定 - ' + (order.slip_no || order.id.slice(0, 8)), body, footer);
+}
+
+async function execObShipAllocated(orderId) {
+  const { data, error } = await sb.rpc('fn_outbound_ship_allocated', { p_order_id: orderId });
+  if (error) { toast('出荷計上失敗: ' + error.message, 'error'); return; }
+  closeModal();
+  toast((data?.shipped_items || 0) + '明細を出荷計上しました');
   await loadOutbound();
 }

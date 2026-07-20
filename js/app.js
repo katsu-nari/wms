@@ -292,7 +292,7 @@ function statusBadge(status) {
   const labels = {
     pending: '受付待ち', received: '入荷済', inspected: '検品済',
     putaway: '棚入済', done: '完了', canceled: 'キャンセル', cancelled: 'キャンセル',
-    picking: 'ピッキング中', shipped: '出荷済',
+    picking: '引当済', shipped: '出荷済',
     draft: '下書き', counting: 'カウント中', reviewing: 'レビュー中',
     planned: '予定', receiving: '検品中', completed: '完了',
   };
