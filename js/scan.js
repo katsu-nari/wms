@@ -382,26 +382,6 @@ function _copyText(text) {
 async function _handleStructuredQr(content, resultEl) {
   try {
     var obj = JSON.parse(content);
-    if (obj && obj.type === 'inbound_plan' && obj.plan_no) {
-      var { data: plan } = await sb.from('inbound_plans')
-        .select('id, plan_no')
-        .eq('plan_no', obj.plan_no)
-        .single();
-
-      if (!plan) {
-        toast('入荷予定が見つかりません: ' + obj.plan_no, 'error');
-        if (resultEl) {
-          resultEl.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:20px;"><div style="font-weight:600;color:var(--red);margin-bottom:4px;">入荷予定が見つかりません</div><div style="font-family:var(--mono);font-size:11px;color:var(--text2);">' + esc(obj.plan_no) + '</div></div></div>';
-        }
-        return true;
-      }
-
-      if (typeof ipGoDetailByPlanNo === 'function') {
-        ipGoDetailByPlanNo(obj.plan_no);
-      }
-      return true;
-    }
-
     if (obj && obj.type === 'location' && obj.location_code) {
       if (typeof locGoDetailByCode === 'function') {
         locGoDetailByCode(obj.location_code);

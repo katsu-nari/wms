@@ -251,9 +251,7 @@ tr:hover td{background:var(--surface2);}
   <div class="nav-sec">
     <div class="nav-lbl">OPERATION</div>
     <div class="nav-item" data-page="inbound" onclick="go('inbound',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>入庫処理</div>
-    <div class="nav-item" data-page="inbound-plan" onclick="go('inbound-plan',this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>入荷予定</div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>入荷</div>
     <div class="nav-item" data-page="outbound" onclick="go('outbound',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/></svg>出庫処理</div>
     <div class="nav-item" data-page="move" onclick="go('move',this)">
@@ -322,8 +320,6 @@ tr:hover td{background:var(--surface2);}
     <div class="page active" id="page-dashboard"></div>
     <div class="page" id="page-inventory"></div>
     <div class="page" id="page-inbound"></div>
-    <div class="page" id="page-inbound-plan"></div>
-    <div class="page" id="page-inbound-plan-detail"></div>
     <div class="page" id="page-outbound"></div>
     <div class="page" id="page-move"></div>
     <div class="page" id="page-stocktake"></div>
@@ -351,7 +347,7 @@ tr:hover td{background:var(--surface2);}
   </div>
   <div class="bnav" id="bn-inbound" onclick="go('inbound')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/></svg>
-    <span class="bnav-lbl">入庫</span>
+    <span class="bnav-lbl">入荷</span>
   </div>
   <div class="bnav" id="bn-outbound" onclick="go('outbound')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 7 12 3 8 7"/><line x1="12" y1="3" x2="12" y2="12"/></svg>
@@ -409,19 +405,18 @@ tr:hover td{background:var(--surface2);}
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-<script src="js/app.js?v=20260720c"></script>
-<script src="js/dashboard.js?v=20260720c"></script>
-<script src="js/products.js?v=20260720c"></script>
-<script src="js/locations.js?v=20260720c"></script>
-<script src="js/inventory.js?v=20260720c"></script>
-<script src="js/inbound.js?v=20260720c"></script>
-<script src="js/outbound.js?v=20260720c"></script>
-<script src="js/move.js?v=20260720c"></script>
-<script src="js/suppliers.js?v=20260720c"></script>
-<script src="js/clients.js?v=20260720c"></script>
-<script src="js/scan.js?v=20260720c"></script>
-<script src="js/inbound-plan.js?v=20260720c"></script>
-<script src="js/inbound-plan-detail.js?v=20260720c"></script>
-<script src="js/stocktake.js?v=20260720c"></script>
+<script src="js/app.js?v=20260720d"></script>
+<script src="js/dashboard.js?v=20260720d"></script>
+<script src="js/products.js?v=20260720d"></script>
+<script src="js/locations.js?v=20260720d"></script>
+<script src="js/inventory.js?v=20260720d"></script>
+<script src="js/inbound.js?v=20260720d"></script>
+<script src="js/outbound.js?v=20260720d"></script>
+<!-- 入荷予定(inbound-plan)機能は廃止 -->
+<script src="js/move.js?v=20260720d"></script>
+<script src="js/suppliers.js?v=20260720d"></script>
+<script src="js/clients.js?v=20260720d"></script>
+<script src="js/scan.js?v=20260720d"></script>
+<script src="js/stocktake.js?v=20260720d"></script>
 </body>
 </html>

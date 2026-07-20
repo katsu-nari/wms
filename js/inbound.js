@@ -1,21 +1,28 @@
 // =====================================================================
 // SUPEREX LogiStation - inbound.js
-// 入庫処理: 一覧 / 新規登録 / 詳細 / 検品 / 棚入れ完了
+// 入荷処理: 一覧 / 新規登録 / 詳細 / 検品 / 棚入れ完了
 // =====================================================================
 
 RENDER_FNS.inbound = async function renderInbound() {
   const el = document.getElementById('page-inbound');
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
       <div class="tabs" id="ibTabs" style="max-width:400px;">
         <div class="tab active" onclick="setIbTab('all',this)">全て</div>
         <div class="tab" onclick="setIbTab('pending',this)">受付待ち</div>
         <div class="tab" onclick="setIbTab('done',this)">完了</div>
       </div>
-      ${isOperator() ? '<button class="btn btn-p" onclick="openInboundModal()">+ 入庫登録</button>' : ''}
+      ${isOperator() ? '<button class="btn btn-p" onclick="openInboundModal()">+ 入荷登録</button>' : ''}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;flex-wrap:wrap;">
+      <div class="sbar" style="max-width:420px;flex:1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="ibSearch" value="${esc(_ibSearch)}" placeholder="入荷予定日 / 入荷先コード / 伝票番号 で検索..." oninput="filterInbound()">
+      </div>
+      <button class="btn btn-g btn-sm" onclick="clearInboundSearch()">クリア</button>
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>伝票No</th><th class="hm">仕入先</th><th>予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
+      <thead><tr><th>伝票No</th><th class="hm">入荷先</th><th>入荷予定日</th><th class="hm">明細</th><th>予定数</th><th>状態</th><th>操作</th></tr></thead>
       <tbody id="ibTb"></tbody>
     </table></div></div>
   `;
@@ -24,6 +31,7 @@ RENDER_FNS.inbound = async function renderInbound() {
 
 let _ibOrders = [];
 let _ibTabFilter = 'all';
+let _ibSearch = '';
 let _ibSuppliers = [];
 let _ibProducts = [];
 
@@ -34,11 +42,23 @@ function setIbTab(tab, tabEl) {
   renderIbTable();
 }
 
+function filterInbound() {
+  _ibSearch = (document.getElementById('ibSearch')?.value || '').trim();
+  renderIbTable();
+}
+
+function clearInboundSearch() {
+  _ibSearch = '';
+  const el = document.getElementById('ibSearch');
+  if (el) el.value = '';
+  renderIbTable();
+}
+
 async function loadInbound() {
   const { data, error } = await sb.from('inbound_orders')
-    .select('*, suppliers(name), inbound_items(id, product_id, planned_qty, received_qty, status)')
+    .select('*, suppliers(name, code), inbound_items(id, product_id, planned_qty, received_qty, status)')
     .order('created_at', { ascending: false });
-  if (error) { toast('入庫一覧の読み込みに失敗しました: ' + error.message, 'error'); }
+  if (error) { toast('入荷一覧の読み込みに失敗しました: ' + error.message, 'error'); }
   _ibOrders = data || [];
   renderIbTable();
 }
@@ -47,6 +67,17 @@ function renderIbTable() {
   let filtered = _ibOrders;
   if (_ibTabFilter !== 'all') {
     filtered = filtered.filter(o => o.status === _ibTabFilter);
+  }
+  // 検索: 入荷予定日 / 入荷先コード / 伝票番号 のいずれかに部分一致
+  const q = (_ibSearch || '').toLowerCase();
+  if (q) {
+    filtered = filtered.filter(o => {
+      const slip = (o.slip_no || '').toLowerCase();
+      const date = (o.planned_date || '').toLowerCase();
+      const supCode = (o.suppliers?.code || '').toLowerCase();
+      const supName = (o.suppliers?.name || o.supplier || '').toLowerCase();
+      return slip.includes(q) || date.includes(q) || supCode.includes(q) || supName.includes(q);
+    });
   }
   const tb = document.getElementById('ibTb');
   if (!tb) return;
@@ -68,7 +99,7 @@ function renderIbTable() {
           </td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="7" class="empty-state">入庫データがありません</td></tr>';
+    : `<tr><td colspan="7" class="empty-state">${(_ibSearch || _ibTabFilter !== 'all') ? '該当する入荷データがありません' : '入荷データがありません'}</td></tr>`;
 }
 
 let _ibRowSeq = 0;
@@ -121,7 +152,7 @@ async function openInboundModal() {
     <button class="btn btn-g" onclick="closeModal()">キャンセル</button>
     <button class="btn btn-p" onclick="saveInbound()">登録</button>
   `;
-  openModal('入庫登録', body, footer, true);
+  openModal('入荷登録', body, footer, true);
 
   // 初期空行を5行表示
   for (let k = 0; k < 5; k++) ibAddRow();
@@ -267,7 +298,7 @@ async function saveInbound() {
   if (iErr) { toast('明細登録失敗: ' + iErr.message, 'error'); return; }
 
   closeModal();
-  toast('入庫を登録しました');
+  toast('入荷を登録しました');
   await loadInbound();
 }
 
@@ -281,8 +312,8 @@ function ibDownloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([header, sample]);
   ws['!cols'] = [{ wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '入庫明細');
-  XLSX.writeFile(wb, '入庫明細テンプレート.xlsx');
+  XLSX.utils.book_append_sheet(wb, ws, '入荷明細');
+  XLSX.writeFile(wb, '入荷明細テンプレート.xlsx');
   toast('テンプレートをダウンロードしました');
 }
 
@@ -378,7 +409,7 @@ async function openIbDetail(orderId) {
       </tr>`).join('')}</tbody>
     </table></div>
   `;
-  openModal('入庫詳細 ' + (order.slip_no || order.id.slice(0, 8)), body, '<button class="btn btn-g" onclick="closeModal()">閉じる</button>');
+  openModal('入荷詳細 ' + (order.slip_no || order.id.slice(0, 8)), body, '<button class="btn btn-g" onclick="closeModal()">閉じる</button>');
 }
 
 async function openIbPutaway(orderId) {
