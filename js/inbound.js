@@ -476,9 +476,15 @@ async function saveInbound() {
 // 入数が空欄の場合は商品マスタの入数を使用。
 function ibDownloadTemplate() {
   const header = ['伝票番号', '入荷日', '入荷先コード', 'JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価', 'ロットNo'];
-  // ロットNoは空欄なら入荷日(YYYYMMDD)が自動設定される
-  const sample = ['IN-0001', '6/5', 'SUP001', '4901234567890', '5', '3', '24', '', '', ''];
-  const ws = XLSX.utils.aoa_to_sheet([header, sample]);
+  // サンプル行: 入荷日は日付型(7/21形式で入力/表示)、JANは数値型。
+  // ロットNoは空欄なら入荷日(YYYYMMDD)が自動設定される。
+  const today = new Date();
+  const sample = ['IN-0001', today, 'SUP001', 4901234567890, 5, 3, 24, '', '', ''];
+  const ws = XLSX.utils.aoa_to_sheet([header, sample], { cellDates: true });
+  // B2: 日付を「7/21」形式で表示(この列に 7/21 と入力すればそのまま日付になる)
+  if (ws['B2']) ws['B2'].z = 'm/d';
+  // D2: JANコードを数値で入れても指数表示(4.9E+12)にならないように
+  if (ws['D2']) ws['D2'].z = '0';
   ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '入荷明細');
@@ -504,8 +510,21 @@ async function ibHandleImportFile(input) {
   }
 }
 
+// Excelセル値をコード文字列に正規化。
+// 数値セル(JAN等)は整数文字列へ、指数表記("4.90123E+12")も復元する。
+function _ibNormCode(v) {
+  if (v == null) return '';
+  if (typeof v === 'number' && isFinite(v)) return v.toFixed(0);
+  let s = String(v).trim();
+  if (/^\d+(\.\d+)?[eE]\+?\d+$/.test(s)) {
+    const n = Number(s);
+    if (isFinite(n)) return n.toFixed(0);
+  }
+  return s;
+}
+
 function _ibLooksLikeJan(v) {
-  v = String(v == null ? '' : v).trim();
+  v = _ibNormCode(v);
   return /^\d{8}$|^\d{13}$/.test(v);
 }
 
@@ -522,13 +541,19 @@ function ibImportRows(dataRows) {
   // ヘッダ項目（伝票番号・入荷日・入荷先）を先頭行から反映
   let headerSlip = '';
   if (isNewFormat) {
-    headerSlip = String(first[COL.slip] == null ? '' : first[COL.slip]).trim();
+    headerSlip = _ibNormCode(first[COL.slip]);
     const dISO = ibParseShortDate(first[COL.date]);
-    const supCode = String(first[COL.sup] == null ? '' : first[COL.sup]).trim();
+    const supCode = _ibNormCode(first[COL.sup]);
     if (headerSlip) document.getElementById('ib_slip').value = headerSlip;
     if (dISO) document.getElementById('ib_date').value = dISO;
     if (supCode) {
-      const sup = _ibSuppliers.find(s => (s.code || '').toLowerCase() === supCode.toLowerCase());
+      // 文字列コードは大文字小文字無視で一致、数値コードは前ゼロ差異も吸収
+      const sup = _ibSuppliers.find(s => {
+        const c = (s.code || '').trim();
+        if (c.toLowerCase() === supCode.toLowerCase()) return true;
+        const a = parseInt(c, 10), b = parseInt(supCode, 10);
+        return /^\d+$/.test(c) && /^\d+$/.test(supCode) && !isNaN(a) && !isNaN(b) && a === b;
+      });
       if (sup) document.getElementById('ib_supplier').value = sup.id;
       else toast('入荷先コードがマスタに見つかりません: ' + supCode, 'error');
     }
@@ -546,12 +571,12 @@ function ibImportRows(dataRows) {
   let otherSlip = 0;
   let overflow = 0;
   dataRows.forEach(function(r) {
-    const jan = String(r[COL.jan] == null ? '' : r[COL.jan]).trim();
+    const jan = _ibNormCode(r[COL.jan]);
     if (!jan) return;
 
     // 別伝票番号の行は対象外（1伝票=1取込）
     if (isNewFormat && headerSlip) {
-      const rowSlip = String(r[COL.slip] == null ? '' : r[COL.slip]).trim();
+      const rowSlip = _ibNormCode(r[COL.slip]);
       if (rowSlip && rowSlip !== headerSlip) { otherSlip++; return; }
     }
 
@@ -563,7 +588,7 @@ function ibImportRows(dataRows) {
     const packOverride = (r[COL.pack] !== '' && r[COL.pack] != null) ? parseInt(r[COL.pack]) : null;
     const cost = (r[COL.cost] !== '' && r[COL.cost] != null) ? parseFloat(r[COL.cost]) : null;
     const sell = (r[COL.sell] !== '' && r[COL.sell] != null) ? parseFloat(r[COL.sell]) : null;
-    const lot = String(r[COL.lot] == null ? '' : r[COL.lot]).trim();
+    const lot = _ibNormCode(r[COL.lot]);
 
     const i = ibAddRow(true);
     if (i < 0) return;

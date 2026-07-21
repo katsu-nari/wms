@@ -35,7 +35,7 @@ const App = {
 const PAGE_TITLES = {
   dashboard: 'ダッシュボード',
   inventory: '在庫一覧',
-  inbound: '入荷',
+  inbound: '入荷処理',
   outbound: '出庫処理',
   move: 'ロケーション移動',
   stocktake: '棚卸管理',
