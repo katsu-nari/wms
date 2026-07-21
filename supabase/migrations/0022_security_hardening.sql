@@ -60,19 +60,32 @@ alter default privileges in schema public revoke all on sequences from anon;
 alter default privileges in schema public revoke execute on functions from anon;
 
 -- ---------------------------------------------------------------------
--- ③ 採番テーブルは operator/admin のみ書込可
+-- ③ 採番テーブルは operator/admin のみ書込可(存在する場合のみ)
 -- ---------------------------------------------------------------------
-drop policy if exists "document_sequences_all" on document_sequences;
-drop policy if exists "document_sequences_op" on document_sequences;
-create policy "document_sequences_op" on document_sequences
-  for all to authenticated
-  using (fn_is_operator_or_admin())
-  with check (fn_is_operator_or_admin());
+do $$
+begin
+  if exists (select 1 from pg_tables where schemaname='public' and tablename='document_sequences') then
+    drop policy if exists "document_sequences_all" on document_sequences;
+    drop policy if exists "document_sequences_op" on document_sequences;
+    create policy "document_sequences_op" on document_sequences
+      for all to authenticated
+      using (fn_is_operator_or_admin()) with check (fn_is_operator_or_admin());
+  else
+    raise notice 'table document_sequences not found, skipped';
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
--- ④ login_attempts の直接insertを封鎖(definer関数経由のみ)
+-- ④ login_attempts の直接insertを封鎖(definer関数経由のみ)(存在する場合のみ)
 -- ---------------------------------------------------------------------
-drop policy if exists login_attempts_anyone_insert on login_attempts;
+do $$
+begin
+  if exists (select 1 from pg_tables where schemaname='public' and tablename='login_attempts') then
+    drop policy if exists login_attempts_anyone_insert on login_attempts;
+  else
+    raise notice 'table login_attempts not found, skipped';
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- ⑤ ログイン系RPC: 社員番号の形式検証を追加
