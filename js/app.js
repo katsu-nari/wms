@@ -292,11 +292,12 @@ function toast(msg, type) {
 }
 
 // ---------- Utility ----------
+// HTMLエスケープ。テキストだけでなく属性値(value="..."等)への挿入にも
+// 安全なよう、引用符(" ')もエスケープする。
+const _ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function esc(s) {
   if (s == null) return '';
-  const d = document.createElement('div');
-  d.textContent = String(s);
-  return d.innerHTML;
+  return String(s).replace(/[&<>"']/g, c => _ESC_MAP[c]);
 }
 
 function fmtDate(d) {
