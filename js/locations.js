@@ -211,7 +211,7 @@ async function openLocationModal(id) {
     + '</div>'
     + '<div class="fr">'
       + '<div class="fl"><div class="flbl">容量</div><input class="fi" id="lm_cap" type="number" min="0" value="' + (l ? l.capacity || '' : '') + '"></div>'
-      + '<div class="fl"><div class="flbl">ピッキング優先度</div><input class="fi" id="lm_pri" type="number" min="1" value="' + (l ? l.pick_priority || 100 : 100) + '"></div>'
+      + '<div class="fl"><div class="flbl">引当優先順位（小さいほど優先）</div><input class="fi" id="lm_pri" type="number" min="1" value="' + (l ? l.pick_priority || 100 : 100) + '"></div>'
     + '</div>'
     + '<div class="fl">'
       + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'

@@ -357,7 +357,8 @@ async function execPick() {
 
 // =====================================================================
 // 出荷引当 (在庫引当)
-//   チェックした明細を対象に、期限の近い在庫から全数を一括引当。
+//   チェックした明細を対象に、先入先出(ロット=入荷日の古い順)→ロケーション
+//   引当優先順位の順で全数を一括引当。
 //   引当確定と同時に在庫を控除し(解除なし)、ピッキングリストを自動出力。
 //   引当済(picking)の伝票は「出荷」でステータス確定。
 // =====================================================================
@@ -366,6 +367,30 @@ let _obAllocItems = [];        // 引当対象明細
 let _obAllocCandidates = {};   // product_id → 利用可能在庫行[]
 let _obAllocPlan = {};         // item_id → [{inventory_id, qty, label}]
 let _obBusy = false;           // 確定処理の二重実行防止フラグ
+
+// 引当候補の並び順（引当ポリシー）:
+//   ① 先入れ先出し: ロットNo昇順（ロット＝入荷日YYYYMMDDのため古い入荷から）
+//   ② ロケーションの引当優先順位(locations.pick_priority 小さいほど優先)
+//   補助: 期限昇順 → ロケーションコード順
+function _obSortCandidates(list, prioMap) {
+  list.sort((a, b) => {
+    const la = a.lot_no || '', lb = b.lot_no || '';
+    if (la !== lb) return la < lb ? -1 : 1;
+    const pa = prioMap[a.location_id] ?? 100, pb = prioMap[b.location_id] ?? 100;
+    if (pa !== pb) return pa - pb;
+    const ea = a.expiry || '9999-12-31', eb = b.expiry || '9999-12-31';
+    if (ea !== eb) return ea < eb ? -1 : 1;
+    return (a.location_code || '').localeCompare(b.location_code || '');
+  });
+}
+
+// ロケーションの引当優先順位マップを取得 (location_id → pick_priority)
+async function _obFetchLocPriority() {
+  const { data } = await sb.from('locations').select('id, pick_priority');
+  const map = {};
+  (data || []).forEach(l => { map[l.id] = l.pick_priority; });
+  return map;
+}
 
 async function openObAllocate(orderId) {
   const { data: order, error } = await sb.from('outbound_orders')
@@ -380,22 +405,21 @@ async function openObAllocate(orderId) {
   const items = (order.outbound_items || []).filter(it => it.status === 'pending');
   if (!items.length) { toast('引当対象の明細がありません', 'error'); return; }
 
-  // 対象商品の利用可能在庫を取得（期限昇順→ロケコード順のFIFO）
+  // 対象商品の利用可能在庫を取得（①先入先出=ロット昇順 ②ロケーション引当優先順位）
   const productIds = [...new Set(items.map(it => it.product_id))];
-  const { data: invRows } = await sb.from('v_inventory_with_names')
-    .select('id, product_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
-    .in('product_id', productIds)
-    .gt('available_qty', 0);
+  const [{ data: invRows }, prioMap] = await Promise.all([
+    sb.from('v_inventory_with_names')
+      .select('id, product_id, location_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
+      .in('product_id', productIds)
+      .gt('available_qty', 0),
+    _obFetchLocPriority(),
+  ]);
 
   _obAllocCandidates = {};
   (invRows || []).forEach(r => {
     (_obAllocCandidates[r.product_id] = _obAllocCandidates[r.product_id] || []).push(r);
   });
-  Object.values(_obAllocCandidates).forEach(list => list.sort((a, b) => {
-    const ea = a.expiry || '9999-12-31', eb = b.expiry || '9999-12-31';
-    if (ea !== eb) return ea < eb ? -1 : 1;
-    return (a.location_code || '').localeCompare(b.location_code || '');
-  }));
+  Object.values(_obAllocCandidates).forEach(list => _obSortCandidates(list, prioMap));
 
   _obAllocItems = items;
 
@@ -413,7 +437,7 @@ async function openObAllocate(orderId) {
 
   const body = `
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
-      チェックした明細を対象に、期限の近い在庫から<strong>全数を一括引当</strong>します。<br>
+      チェックした明細を対象に、<strong>先入先出（ロット＝入荷日の古い順）→ ロケーション引当優先順位</strong>の順で全数を一括引当します。<br>
       <span style="color:var(--red);">引当確定と同時に在庫が引き落とされ、取消はできません。</span>確定後はピッキングリストが自動で表示されます。
     </div>
     <div class="tw"><table>
@@ -630,17 +654,16 @@ async function execObBulkAllocate() {
     (o.outbound_items || []).filter(it => it.status === 'pending').map(it => it.product_id)))];
   if (!productIds.length) { toast('引当対象の明細がありません', 'error'); return; }
 
-  const { data: invRows } = await sb.from('v_inventory_with_names')
-    .select('id, product_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
-    .in('product_id', productIds)
-    .gt('available_qty', 0);
+  const [{ data: invRows }, prioMap] = await Promise.all([
+    sb.from('v_inventory_with_names')
+      .select('id, product_id, location_id, location_code, lot_no, expiry, qty, locked_qty, available_qty')
+      .in('product_id', productIds)
+      .gt('available_qty', 0),
+    _obFetchLocPriority(),
+  ]);
   const cands = {};
   (invRows || []).forEach(r => { (cands[r.product_id] = cands[r.product_id] || []).push(r); });
-  Object.values(cands).forEach(list => list.sort((a, b) => {
-    const ea = a.expiry || '9999-12-31', eb = b.expiry || '9999-12-31';
-    if (ea !== eb) return ea < eb ? -1 : 1;
-    return (a.location_code || '').localeCompare(b.location_code || '');
-  }));
+  Object.values(cands).forEach(list => _obSortCandidates(list, prioMap));
 
   // 伝票ごとにFIFOプラン作成。全数を賄えない伝票は対象外(在庫は他伝票へ)
   const usedMap = {};
@@ -685,7 +708,7 @@ async function execObBulkAllocate() {
 
   const body = `
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
-      チェックした伝票を出荷予定日の早い順に全数引当します。<br>
+      チェックした伝票を出荷予定日の早い順に、先入先出（ロット＝入荷日の古い順）→ ロケーション引当優先順位で全数引当します。<br>
       <span style="color:var(--red);">引当確定と同時に在庫が引き落とされ、取消はできません。</span>
       在庫不足の伝票は今回の引当から除外されます。確定後はピッキングリストが自動で表示されます。
     </div>

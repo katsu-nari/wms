@@ -215,7 +215,7 @@ async function openInboundModal(orderId) {
     </div>
     <hr style="border-color:var(--border);">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-      <div class="flbl" style="margin:0;">明細行（1伝票につき最大10行）</div>
+      <div class="flbl" style="margin:0;">明細行（1伝票につき最大10行）<span style="font-weight:400;color:var(--text3);margin-left:8px;">ロットNo未入力時は入荷日(YYYYMMDD)を自動設定</span></div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-g btn-sm" onclick="ibDownloadTemplate()">テンプレート</button>
         <label class="btn btn-g btn-sm" style="cursor:pointer;margin:0;">CSV / Excel取込<input type="file" accept=".csv,.xlsx,.xls" onchange="ibHandleImportFile(this)" style="display:none;"></label>
@@ -286,7 +286,7 @@ function ibRowInnerHtml(i) {
     <td style="padding:4px 6px;text-align:center;"><button class="btn btn-g btn-sm" style="padding:2px 7px;" onclick="ibRemoveRow(${i})" title="行を削除">×</button></td>
     <td style="padding:4px 3px;"><input class="fi ib-jan" style="font-size:11px;padding:5px 6px;width:110px;" placeholder="JAN" data-row="${i}" onchange="ibJanLookup(${i})"></td>
     <td style="padding:4px 3px;"><span class="ib-pname" id="ibPname${i}" style="font-size:11px;color:var(--text2);">—</span><input type="hidden" class="ib-pid" id="ibPid${i}"></td>
-    <td style="padding:4px 3px;"><input class="fi ib-lot" id="ibLot${i}" style="font-size:11px;padding:5px 6px;width:84px;" placeholder="ロット"></td>
+    <td style="padding:4px 3px;"><input class="fi ib-lot" id="ibLot${i}" style="font-size:11px;padding:5px 6px;width:84px;" placeholder="自動(入荷日)"></td>
     <td style="padding:4px 3px;"><input class="fi ib-cost" id="ibCost${i}" style="font-size:11px;padding:5px 6px;width:74px;" type="number" step="0.01"></td>
     <td style="padding:4px 3px;"><input class="fi ib-sell" id="ibSell${i}" style="font-size:11px;padding:5px 6px;width:74px;" type="number" step="0.01"></td>
     <td style="padding:4px 3px;"><input class="fi ib-pack" id="ibPack${i}" style="font-size:11px;padding:5px 6px;width:54px;" type="number" min="1" value="1" oninput="ibCalcTotal(${i})"></td>
@@ -380,6 +380,8 @@ async function saveInbound() {
   const supplierId = document.getElementById('ib_supplier').value || null;
   const date = document.getElementById('ib_date').value || null;
   const note = document.getElementById('ib_note').value.trim() || null;
+  // ロット運用: ロット＝入荷日。未入力のロットは入荷日(YYYYMMDD)を自動設定
+  const autoLot = date ? date.replace(/-/g, '') : '';
 
   const items = [];
   const rowEls = document.querySelectorAll('#ibItemsBody .ib-row');
@@ -403,7 +405,7 @@ async function saveInbound() {
       case_qty: caseQty,
       piece_qty: pieceQty,
       pack_size: packSize,
-      lot_no: (document.getElementById('ibLot' + i)?.value || '').trim(),
+      lot_no: (document.getElementById('ibLot' + i)?.value || '').trim() || autoLot,
     });
   });
   if (!items.length) { toast('明細を1行以上入力してください（商品と数量が必要です）', 'error'); return; }
@@ -474,7 +476,8 @@ async function saveInbound() {
 // 入数が空欄の場合は商品マスタの入数を使用。
 function ibDownloadTemplate() {
   const header = ['伝票番号', '入荷日', '入荷先コード', 'JANコード', 'ケース数', 'ピース数', '入数', '原単価', '売単価', 'ロットNo'];
-  const sample = ['IN-0001', '6/5', 'SUP001', '4901234567890', '5', '3', '24', '', '', 'LOT2026A'];
+  // ロットNoは空欄なら入荷日(YYYYMMDD)が自動設定される
+  const sample = ['IN-0001', '6/5', 'SUP001', '4901234567890', '5', '3', '24', '', '', ''];
   const ws = XLSX.utils.aoa_to_sheet([header, sample]);
   ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
@@ -577,7 +580,9 @@ function ibImportRows(dataRows) {
     }
     if (cost != null && !isNaN(cost)) document.getElementById('ibCost' + i).value = cost;
     if (sell != null && !isNaN(sell)) document.getElementById('ibSell' + i).value = sell;
-    if (lot) document.getElementById('ibLot' + i).value = lot;
+    // ロット未指定時は入荷日(YYYYMMDD)を自動設定（ロット＝入荷日の運用）
+    const impAutoLot = (document.getElementById('ib_date')?.value || '').replace(/-/g, '');
+    document.getElementById('ibLot' + i).value = lot || impAutoLot;
     document.getElementById('ibCase' + i).value = caseQty || '';
     document.getElementById('ibPiece' + i).value = pieceQty || '';
     ibCalcTotal(i);
