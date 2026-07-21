@@ -9,7 +9,7 @@ RENDER_FNS.products = async function renderProducts() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:8px;flex-wrap:wrap;">
       <div class="sbar" style="max-width:320px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="prodSearch" placeholder="SKU / 商品名 / JANで検索..." oninput="filterProducts()">
+        <input id="prodSearch" placeholder="JAN / 商品名で検索..." oninput="filterProducts()">
       </div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-g btn-sm" onclick="exportProductsCSV()">CSV</button>
@@ -17,7 +17,7 @@ RENDER_FNS.products = async function renderProducts() {
       </div>
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>SKU</th><th>商品名</th><th class="hm">JAN</th><th>単位</th><th class="hm">原単価</th><th class="hm">売単価</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th>在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
+      <thead><tr><th>JANコード</th><th>商品名</th><th>単位</th><th class="hm">原単価</th><th class="hm">売単価</th><th class="hm">保管条件</th><th class="hm">最低在庫</th><th>在庫</th><th class="hm">期限管理</th>${isAdmin() ? '<th>操作</th>' : ''}</tr></thead>
       <tbody id="prodTb"></tbody>
     </table></div></div>
   `;
@@ -49,9 +49,8 @@ function filterProducts() {
   if (!tb) return;
   tb.innerHTML = filtered.length
     ? filtered.map(p => `<tr>
-        <td style="font-family:var(--mono);font-size:11px;">${esc(p.sku)}</td>
+        <td style="font-family:var(--mono);font-size:11px;">${esc(p.jan_code || p.sku) || '—'}</td>
         <td>${esc(p.name)}</td>
-        <td class="hm" style="font-family:var(--mono);font-size:11px;">${esc(p.jan_code) || '—'}</td>
         <td>${esc(p.unit)}${p.pack_size > 1 ? ' ×' + p.pack_size : ''}</td>
         <td class="hm" style="font-family:var(--mono);">${p.cost_price != null ? Number(p.cost_price).toLocaleString() : '—'}</td>
         <td class="hm" style="font-family:var(--mono);">${p.sell_price != null ? Number(p.sell_price).toLocaleString() : '—'}</td>
@@ -61,7 +60,7 @@ function filterProducts() {
         <td class="hm">${p.track_expiry ? '<span class="badge bg">有</span>' : '<span class="badge bgr">無</span>'}</td>
         ${isAdmin() ? `<td><button class="btn btn-g btn-sm" onclick="openProductModal('${p.id}')">編集</button></td>` : ''}
       </tr>`).join('')
-    : '<tr><td colspan="11" class="empty-state">商品が見つかりません</td></tr>';
+    : '<tr><td colspan="10" class="empty-state">商品が見つかりません</td></tr>';
 }
 
 function openProductModal(id) {

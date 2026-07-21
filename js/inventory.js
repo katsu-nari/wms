@@ -10,7 +10,7 @@ RENDER_FNS.inventory = async function renderInventory() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <div class="sbar" style="max-width:260px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input id="invSearch" placeholder="SKU / 商品名 / JAN..." oninput="filterInventory()">
+          <input id="invSearch" placeholder="JAN / 商品名 / ロケーション..." oninput="filterInventory()">
         </div>
         <button class="btn-scan" onclick="invScan()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="13" y2="8"/><line x1="7" y1="16" x2="15" y2="16"/></svg>スキャン</button>
         <select class="fs" id="invZone" style="width:auto;min-width:80px;" onchange="filterInventory()">
@@ -33,7 +33,7 @@ RENDER_FNS.inventory = async function renderInventory() {
       <button class="btn btn-g btn-sm" onclick="exportInventoryCSV()">CSV エクスポート</button>
     </div>
     <div class="card"><div class="tw"><table>
-      <thead><tr><th>SKU</th><th>商品名</th><th>ロケーション</th><th class="hm">ロット</th><th class="hm">期限</th><th>在庫</th><th class="hm">ロック</th><th class="hm">利用可</th><th>状態</th></tr></thead>
+      <thead><tr><th>JANコード</th><th>商品名</th><th>ロケーション</th><th class="hm">ロット</th><th class="hm">期限</th><th>在庫</th><th class="hm">ロック</th><th class="hm">利用可</th><th>状態</th></tr></thead>
       <tbody id="invTb"></tbody>
     </table></div></div>
     <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3);" id="invCount"></div>
@@ -44,7 +44,7 @@ RENDER_FNS.inventory = async function renderInventory() {
 let _inventory = [];
 
 async function loadInventory() {
-  const { data } = await sb.from('v_inventory_with_names').select('*').order('sku');
+  const { data } = await sb.from('v_inventory_with_names').select('*').order('jan_code');
   const today = new Date().toISOString().slice(0, 10);
   // 在庫0で前日以前に更新された行は非表示
   _inventory = (data || []).filter(i =>
@@ -56,6 +56,13 @@ async function loadInventory() {
   const sel = document.getElementById('invZone');
   if (sel) {
     sel.innerHTML = '<option value="">全ゾーン</option>' + zones.map(z => `<option value="${esc(z)}">${esc(z)}</option>`).join('');
+  }
+
+  // ダッシュボードのアラート等から遷移した場合の検索語を反映
+  if (window._invPendingSearch) {
+    const searchEl = document.getElementById('invSearch');
+    if (searchEl) searchEl.value = window._invPendingSearch;
+    window._invPendingSearch = '';
   }
   filterInventory();
 }
@@ -92,7 +99,7 @@ function filterInventory() {
         const isExp = i.expiry && new Date(i.expiry).getTime() < in30;
         const rowStyle = isLow ? 'border-left:3px solid var(--red);' : isExp ? 'border-left:3px solid var(--yellow);' : '';
         return `<tr style="${rowStyle}">
-          <td style="font-family:var(--mono);font-size:11px;">${esc(i.sku)}</td>
+          <td style="font-family:var(--mono);font-size:11px;">${esc(i.jan_code || i.sku)}</td>
           <td>${esc(i.product_name)}</td>
           <td style="font-family:var(--mono);font-size:11px;">${esc(i.location_code)}</td>
           <td class="hm" style="font-family:var(--mono);font-size:11px;">${esc(i.lot_no) || '—'}</td>
@@ -113,9 +120,9 @@ function filterInventory() {
 }
 
 function exportInventoryCSV() {
-  const header = ['SKU', '商品名', 'ロケーション', 'ゾーン', '保管条件', 'ロット', '期限', '在庫数', 'ロック数', '利用可能数', '最低在庫', '残少'];
+  const header = ['JANコード', 'SKU', '商品名', 'ロケーション', 'ゾーン', '保管条件', 'ロット', '期限', '在庫数', 'ロック数', '利用可能数', '最低在庫', '残少'];
   const rows = _inventory.map(i => [
-    i.sku, i.product_name, i.location_code, i.zone, conditionLabel(i.storage_condition),
+    i.jan_code || '', i.sku, i.product_name, i.location_code, i.zone, conditionLabel(i.storage_condition),
     i.lot_no, i.expiry || '', i.qty, i.locked_qty, i.available_qty, i.min_stock, i.low_stock ? '残少' : '',
   ]);
   downloadCSV('wms_inventory_' + new Date().toISOString().slice(0, 10) + '.csv', header, rows);

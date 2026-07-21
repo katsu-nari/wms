@@ -36,62 +36,80 @@ RENDER_FNS.dashboard = async function renderDashboard() {
     </div>
   `;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // ローカル日付(YYYY-MM-DD)。UTC変換による日付ずれを避ける
+  const localDate = (d) => {
+    const x = d instanceof Date ? d : new Date(d);
+    return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  };
+  const today = localDate(new Date());
+  const since = new Date();
+  since.setDate(since.getDate() - 6);
+  since.setHours(0, 0, 0, 0);
 
-  const [invRes, ibRes, obRes] = await Promise.all([
+  const [invRes, ibRes, obRes, mvRes] = await Promise.all([
     sb.from('v_inventory_with_names').select('*'),
     sb.from('inbound_orders').select('*, inbound_items(*)').order('created_at', { ascending: false }).limit(50),
     sb.from('outbound_orders').select('*, outbound_items(*)').order('created_at', { ascending: false }).limit(50),
+    // 週次入出庫は実績(在庫移動履歴)から集計: 入荷計上・出荷引当が反映される
+    sb.from('inventory_movements').select('type, qty_delta, created_at')
+      .gte('created_at', since.toISOString())
+      .in('type', ['inbound', 'outbound']),
   ]);
 
   const inv = invRes.data || [];
   const ibOrders = ibRes.data || [];
   const obOrders = obRes.data || [];
+  const movements = mvRes.data || [];
 
-  // Flatten items for counting
-  const ibItems = ibOrders.flatMap(o => (o.inbound_items || []).map(it => ({ ...it, date: o.planned_date, created_at: o.created_at })));
-  const obItems = obOrders.flatMap(o => (o.outbound_items || []).map(it => ({ ...it, date: o.planned_date, created_at: o.created_at })));
-
-  const ibToday = ibOrders.filter(o => (o.planned_date || '').slice(0, 10) === today);
-  const obToday = obOrders.filter(o => (o.planned_date || '').slice(0, 10) === today);
+  // 日別実績集計 (入庫=inbound加算合計 / 出庫=outbound控除の絶対値合計)
+  const ibD = {}, obD = {};
+  const ibCnt = {}, obCnt = {};
+  movements.forEach(m => {
+    const k = localDate(m.created_at);
+    if (m.type === 'inbound') {
+      ibD[k] = (ibD[k] || 0) + Math.max(0, m.qty_delta || 0);
+      ibCnt[k] = (ibCnt[k] || 0) + 1;
+    } else if (m.type === 'outbound') {
+      obD[k] = (obD[k] || 0) + Math.abs(Math.min(0, m.qty_delta || 0));
+      obCnt[k] = (obCnt[k] || 0) + 1;
+    }
+  });
 
   const totalQty = inv.reduce((s, i) => s + (i.qty || 0), 0);
   const low = inv.filter(i => i.qty > 0 && i.low_stock);
   const exp = inv.filter(i => i.expiry && new Date(i.expiry) < new Date(Date.now() + 7 * 864e5));
   const pendingIb = ibOrders.filter(o => o.status === 'pending').length;
 
-  // KPI
+  // KPI (本日入庫/出庫は実績ベース)
   document.getElementById('kTotalQty').textContent = totalQty.toLocaleString();
   document.getElementById('kTotalSub').textContent = inv.length + '品種';
-  document.getElementById('kTodayIn').textContent = ibToday.reduce((s, o) => s + (o.inbound_items || []).reduce((a, it) => a + (it.planned_qty || 0), 0), 0).toLocaleString();
-  document.getElementById('kTodayInSub').textContent = ibToday.length + '件';
-  document.getElementById('kTodayOut').textContent = obToday.reduce((s, o) => s + (o.outbound_items || []).reduce((a, it) => a + (it.planned_qty || 0), 0), 0).toLocaleString();
-  document.getElementById('kTodayOutSub').textContent = obToday.length + '件';
+  document.getElementById('kTodayIn').textContent = (ibD[today] || 0).toLocaleString();
+  document.getElementById('kTodayInSub').textContent = (ibCnt[today] || 0) + '件';
+  document.getElementById('kTodayOut').textContent = (obD[today] || 0).toLocaleString();
+  document.getElementById('kTodayOutSub').textContent = (obCnt[today] || 0) + '件';
 
   const alertCount = low.length + exp.length + pendingIb;
   document.getElementById('kAlert').textContent = alertCount;
   document.getElementById('kAlertSub').textContent = alertCount > 0 ? '要対応あり' : '問題なし';
 
-  // Alerts
+  // Alerts (クリックで該当ページへ遷移: page/q に遷移先と検索語を保持)
   const alerts = [
-    ...low.map(i => ({ cls: 'ae', title: '在庫残少', msg: i.product_name + ' / 残' + i.qty + '個', color: 'var(--red)' })),
-    ...exp.map(i => ({ cls: 'aw', title: '期限切れ接近', msg: i.product_name + ' / ' + i.expiry, color: 'var(--warn)' })),
-    ...ibOrders.filter(o => o.status === 'pending').slice(0, 3).map(o => ({ cls: 'ai', title: '入庫受付待ち', msg: o.slip_no || o.id.slice(0, 8), color: 'var(--blue)' })),
+    ...low.map(i => ({ cls: 'ae', title: '在庫残少', msg: i.product_name + ' / 残' + i.qty + '個', color: 'var(--red)', page: 'inventory', q: i.product_name })),
+    ...exp.map(i => ({ cls: 'aw', title: '期限切れ接近', msg: i.product_name + ' / ' + i.expiry, color: 'var(--warn)', page: 'inventory', q: i.product_name })),
+    ...ibOrders.filter(o => o.status === 'pending').slice(0, 3).map(o => ({ cls: 'ai', title: '入荷受付待ち', msg: o.slip_no || o.id.slice(0, 8), color: 'var(--blue)', page: 'inbound', q: o.slip_no || '' })),
   ].slice(0, 6);
+  window._dashAlerts = alerts;
 
   document.getElementById('alertBadge').textContent = alertCount + '件';
   document.getElementById('alertList').innerHTML = alerts.length
-    ? alerts.map(a => `<div class="al ${a.cls}"><div class="aldot" style="background:${a.color};"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">${esc(a.title)}</div><div style="font-size:11px;color:var(--text2);">${esc(a.msg)}</div></div></div>`).join('')
+    ? alerts.map((a, i) => `<div class="al ${a.cls}" style="cursor:pointer;" onclick="dashAlertClick(${i})" title="クリックで該当ページへ"><div class="aldot" style="background:${a.color};"></div><div><div style="font-size:12px;font-weight:500;margin-bottom:1px;">${esc(a.title)}</div><div style="font-size:11px;color:var(--text2);">${esc(a.msg)}</div></div></div>`).join('')
     : '<div style="text-align:center;padding:14px;color:var(--text3);font-size:12px;">アラートなし</div>';
 
-  // Trend chart (7 days)
+  // Trend chart (7 days) — 実績(在庫移動履歴)ベース。ibD/obD は上で集計済み
   const days7 = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - 6 + i);
-    return d.toISOString().slice(0, 10);
+    return localDate(d);
   });
-  const ibD = {}, obD = {};
-  ibOrders.forEach(o => { const d = (o.planned_date || '').slice(0, 10); const q = (o.inbound_items || []).reduce((a, it) => a + (it.planned_qty || 0), 0); ibD[d] = (ibD[d] || 0) + q; });
-  obOrders.forEach(o => { const d = (o.planned_date || '').slice(0, 10); const q = (o.outbound_items || []).reduce((a, it) => a + (it.planned_qty || 0), 0); obD[d] = (obD[d] || 0) + q; });
   const maxV = Math.max(...days7.map(d => Math.max(ibD[d] || 0, obD[d] || 0)), 1);
   const dn = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -124,6 +142,19 @@ RENDER_FNS.dashboard = async function renderDashboard() {
       </tr>`).join('')
     : '<tr><td colspan="5" class="empty-state">まだ操作履歴がありません</td></tr>';
 };
+
+// アラートをクリックで該当ページへ遷移（検索語を引き継ぐ）
+function dashAlertClick(i) {
+  const a = (window._dashAlerts || [])[i];
+  if (!a) return;
+  if (a.page === 'inventory') {
+    window._invPendingSearch = a.q || '';
+    go('inventory');
+  } else if (a.page === 'inbound') {
+    if (typeof _ibSearch !== 'undefined') _ibSearch = a.q || '';
+    go('inbound');
+  }
+}
 
 // 他端末の作業進捗を自動反映（app.jsの自動リフレッシュに登録）
 AUTO_REFRESH_FNS.dashboard = RENDER_FNS.dashboard;
