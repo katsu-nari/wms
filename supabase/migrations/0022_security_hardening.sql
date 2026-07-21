@@ -25,10 +25,24 @@
 
 -- ---------------------------------------------------------------------
 -- ① ビューを呼び出し元権限(security_invoker)で実行し RLS を適用
+--    存在するビューにのみ適用(未適用マイグレーションによる欠落に備える)
 -- ---------------------------------------------------------------------
-alter view v_inventory_with_names set (security_invoker = on);
-alter view v_inventory_by_location set (security_invoker = on);
-alter view v_location_summary set (security_invoker = on);  -- 冪等(0007で設定済み)
+do $$
+declare
+  v text;
+begin
+  foreach v in array array[
+    'v_inventory_with_names',
+    'v_inventory_by_location',
+    'v_location_summary'
+  ] loop
+    if exists (select 1 from pg_views where schemaname = 'public' and viewname = v) then
+      execute format('alter view public.%I set (security_invoker = on)', v);
+    else
+      raise notice 'view % not found, skipped', v;
+    end if;
+  end loop;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- ② anon の権限剥奪。未ログインに必要なのはログインRPC2本のみ
