@@ -182,19 +182,65 @@ async function startLiveScanner() {
   var onOk = function(text, result) {
     var detectMs = _scanStartMs ? (Date.now() - _scanStartMs) : 0;
     _scanStartMs = Date.now();
-    console.log('SCAN SUCCESS', text, 'detectTime=' + detectMs + 'ms');
-    try {
-      var video = document.querySelector('#scan-reader video');
-      if (video && video.srcObject) {
-        var track = video.srcObject.getVideoTracks()[0];
-        if (track) console.log('SCAN TRACK SETTINGS', JSON.stringify(track.getSettings()));
+
+    // ---- 読取精度向上: 誤読フィルタ ----
+    var fmt = result && result.result && result.result.format;
+    var isQr = !!(fmt && (fmt.format === 0 || fmt.formatName === 'QR_CODE'));
+    if (!isQr) {
+      // ① EAN-8/13 チェックデジット検証（桁化け誤読を破棄）
+      //    フォーマット名が取れる場合はEANのときのみ検証(CODE128の13桁数字は対象外)
+      var fmtName = fmt && fmt.formatName;
+      var isEan = fmtName === 'EAN_13' || fmtName === 'EAN_8'
+        || (!fmtName && /^\d{8}$|^\d{13}$/.test(text));
+      if (isEan && !_validEanChecksum(text)) {
+        console.log('SCAN REJECT (checksum NG)', text);
+        _updateScanDebug(text + ' ✗checksum');
+        return;
       }
-    } catch (e) {}
+      // ② 1Dバーコードは同一コードが2回連続で読めたときのみ確定
+      //    (QRは誤り訂正内蔵のため1回で確定)
+      var now = Date.now();
+      if (text === _scanPendCode && now - _scanPendTime < 1500) {
+        _scanPendCount++;
+      } else {
+        _scanPendCode = text;
+        _scanPendCount = 1;
+      }
+      _scanPendTime = now;
+      if (_scanPendCount < 2) {
+        _updateScanDebug(text + ' (確認中1/2)');
+        return;
+      }
+      _scanPendCode = '';
+      _scanPendCount = 0;
+    }
+
+    console.log('SCAN SUCCESS', text, 'detectTime=' + detectMs + 'ms');
     _resetScanGuide();
     onScanResult(text, result);
   };
   var onNg = function() {};
-  var cfg = { fps: 15, qrbox: { width: 450, height: 180 } };
+
+  // 読取枠は映像サイズに合わせて可変(横長=1Dバーコード向き)。
+  // 固定450pxは小さい画面で起動失敗の原因になるため関数指定にする。
+  var cfg = {
+    fps: 15,
+    qrbox: function(vw, vh) {
+      return {
+        width: Math.max(200, Math.min(Math.floor(vw * 0.85), 520)),
+        height: Math.max(120, Math.min(Math.floor(vh * 0.5), 230)),
+      };
+    },
+    // 対応端末(Android Chrome等)ではネイティブのBarcodeDetectorを使用
+    // (JS実装より高速・高精度)
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+    // 高解像度でカメラを起動(既定の640x480では小さなバーコードが読めない)
+    videoConstraints: {
+      facingMode: 'environment',
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    },
+  };
   try {
     cfg.formatsToSupport = [
       Html5QrcodeSupportedFormats.EAN_13,
@@ -213,6 +259,7 @@ async function startLiveScanner() {
     );
     console.log('CAMERA STARTED');
     _scanStartMs = Date.now();
+    _applyFocusConstraints();
     _startScanGuide();
     _logCameraInfo();
     _updateScanDebug();
@@ -222,6 +269,40 @@ async function startLiveScanner() {
     _scanner = null;
     _showCameraError(err);
   }
+}
+
+// ---------- 読取精度向上ヘルパー ----------
+
+// 1Dバーコードの連続一致確認用
+var _scanPendCode = '';
+var _scanPendCount = 0;
+var _scanPendTime = 0;
+
+// EAN-8 / EAN-13 のチェックデジット検証。EAN以外の桁数は対象外(true)
+function _validEanChecksum(code) {
+  if (!/^\d{8}$|^\d{13}$/.test(code)) return true;
+  var digits = code.split('').map(Number);
+  var check = digits.pop();
+  var sum = 0;
+  digits.reverse().forEach(function(d, i) { sum += d * (i % 2 === 0 ? 3 : 1); });
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+// 対応カメラにはオートフォーカス(continuous)を明示要求。
+// 近距離のバーコードにピントが合いやすくなる。
+function _applyFocusConstraints() {
+  try {
+    var video = document.querySelector('#scan-reader video');
+    if (!video || !video.srcObject) return;
+    var track = video.srcObject.getVideoTracks()[0];
+    if (!track || typeof track.getCapabilities !== 'function') return;
+    var caps = track.getCapabilities();
+    if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+        .then(function() { console.log('FOCUS continuous applied'); })
+        .catch(function() {});
+    }
+  } catch (e) {}
 }
 
 function _showCameraError(err) {
