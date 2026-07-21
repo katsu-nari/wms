@@ -198,6 +198,35 @@ tr:hover td{background:var(--surface2);}
   .hm{display:none!important;}
   .modal-ov{padding:0;align-items:flex-end;}
   .modal{border-radius:14px 14px 0 0;max-height:88vh;}
+
+  /* ===== スマホ操作性強化 ===== */
+  /* タップターゲットを大きく(指で押しやすいサイズに) */
+  .btn{padding:11px 15px;font-size:13px;min-height:42px;}
+  .btn-sm{padding:9px 11px;font-size:12px;min-height:38px;}
+  .btn-scan{padding:9px 11px!important;}
+  /* 入力欄: 16px未満だとiOSが自動ズームするため16pxに統一 */
+  .fi,.fs{font-size:16px!important;padding:11px 12px;min-height:44px;}
+  .sbar{padding:10px 12px;}
+  .sbar input{font-size:16px;}
+  .sbar svg{width:16px;height:16px;}
+  /* モーダル内の明細入力(インラインstyleの11px指定を上書き) */
+  .modal .fi,.modal .fs{font-size:16px!important;padding:10px 8px!important;min-height:42px;}
+  /* タブを押しやすく */
+  .tabs{max-width:none!important;width:100%;}
+  .tab{padding:10px 4px;font-size:12px;}
+  /* 一覧テーブルのセルと文字を大きく */
+  th,td{padding:11px 9px;font-size:12.5px;}
+  /* チェックボックスを大きく */
+  input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent);}
+  /* 検索行の日付入力は2つ並びで画面幅にフィット */
+  #ibDateFrom,#ibDateTo,#obDateFrom,#obDateTo{width:calc(50% - 30px)!important;min-width:120px;}
+  /* ページタイトル */
+  .page-title{font-size:15px;}
+  /* モーダルのフッターボタンを折返しで押しやすく */
+  .modal-ft{flex-wrap:wrap;gap:8px;}
+  .modal-ft .btn{flex:1;min-width:44%;}
+  /* バッジ・ステータスも読みやすく */
+  .badge{font-size:11px;padding:3px 8px;}
 }
 </style>
 </head>
@@ -405,18 +434,18 @@ tr:hover td{background:var(--surface2);}
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-<script src="js/app.js?v=20260720k"></script>
-<script src="js/dashboard.js?v=20260720k"></script>
-<script src="js/products.js?v=20260720k"></script>
-<script src="js/locations.js?v=20260720k"></script>
-<script src="js/inventory.js?v=20260720k"></script>
-<script src="js/inbound.js?v=20260720k"></script>
-<script src="js/outbound.js?v=20260720k"></script>
+<script src="js/app.js?v=20260720l"></script>
+<script src="js/dashboard.js?v=20260720l"></script>
+<script src="js/products.js?v=20260720l"></script>
+<script src="js/locations.js?v=20260720l"></script>
+<script src="js/inventory.js?v=20260720l"></script>
+<script src="js/inbound.js?v=20260720l"></script>
+<script src="js/outbound.js?v=20260720l"></script>
 <!-- 入荷予定(inbound-plan)機能は廃止 -->
-<script src="js/move.js?v=20260720k"></script>
-<script src="js/suppliers.js?v=20260720k"></script>
-<script src="js/clients.js?v=20260720k"></script>
-<script src="js/scan.js?v=20260720k"></script>
-<script src="js/stocktake.js?v=20260720k"></script>
+<script src="js/move.js?v=20260720l"></script>
+<script src="js/suppliers.js?v=20260720l"></script>
+<script src="js/clients.js?v=20260720l"></script>
+<script src="js/scan.js?v=20260720l"></script>
+<script src="js/stocktake.js?v=20260720l"></script>
 </body>
 </html>
